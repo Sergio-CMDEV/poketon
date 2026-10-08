@@ -1,0 +1,14 @@
+{
+  "name": "poketon",
+  "version": "1.0.0",
+  "private": true,
+  "description": "App de escritorio (Tauri) de Poketon",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  },
+  "license": "MIT"
+}

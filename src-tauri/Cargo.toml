@@ -1,0 +1,17 @@
+[package]
+name = "poketon"
+version = "1.0.0"
+description = "Poketon: debilidades, stats, evoluciones y equipos Pokémon"
+authors = ["Sergio Carrascosa Medina"]
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+
+[profile.release]
+strip = true
+lto = true
+opt-level = "s"

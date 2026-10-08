@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Poketon</title>
+  <meta name="description" content="Debilidades, estadísticas, evoluciones y constructor de equipos Pokémon.">
+  <link rel="icon" href="icono.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/styles.css">
+  <!-- Tema elegido (claro / oscuro) antes de pintar nada, para que no parpadee -->
+  <script>try { if (localStorage.getItem('tema') === 'oscuro') document.documentElement.dataset.tema = 'oscuro'; } catch {}</script>
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <div class="app">
+    <!-- La cabecera y el contenido los pinta js/app.js según la pantalla -->
+    <header id="cabecera" class="cabecera">
+      <a href="#/" class="marca">Poke<span>ton</span></a>
+    </header>
+    <main id="vista" class="vista">
+      <p class="nota">Cargando…</p>
+    </main>
+  </div>
+  <div id="aviso" class="toast" role="status" hidden></div>
+</body>
+</html>
