@@ -1,6 +1,6 @@
 // Pantallas 2, 3, 4 y 8 · Iniciar sesión, registro, recuperar contraseña (pasos 1 y 2), Mi cuenta y privacidad.
 
-import { peticion, sesion, guardarSesion, cerrarSesion } from '../api.js';
+import { peticion, sesion, guardarSesion, cerrarSesion, esEscritorio, WEB } from '../api.js';
 import { catalogo } from '../datos.js';
 import { el, campoForm, aviso, poner, iconoGoogle } from '../ui.js';
 import { subirBorradorPendiente, borrador, misEquipos } from '../equipos.js';
@@ -13,8 +13,13 @@ async function entrar(datos) {
     const subido = await subirBorradorPendiente();
     if (subido) aviso(`Tu equipo "${subido.nombre}" se ha guardado en la cuenta`);
   } catch (e) { aviso(`No se pudo guardar el equipo: ${e.message}`, 'error'); }
-  location.hash = '#/equipos';
   window.dispatchEvent(new Event('sesion'));
+  // Si se entró para conectar la app de escritorio, se vuelve a la app; si no, a "Mis equipos"
+  if (sessionStorage.getItem('escritorio')) {
+    try { await completarEscritorio(); } catch (e) { aviso(e.message, 'error'); location.hash = '#/equipos'; }
+    return;
+  }
+  location.hash = '#/equipos';
 }
 
 /** Formulario que llama a la API al enviarse y muestra el error en la caja rosa si falla. */
@@ -33,28 +38,69 @@ function formulario(campos, textoBoton, alEnviar, { clase = '', peligro = false 
 }
 
 const input = (name, type = 'text', extra = {}) => el('input', { name, type, required: true, ...extra });
-const esEscritorio = location.protocol === 'tauri:' || location.hostname === 'tauri.localhost';
-const googleDisponible = () => !!catalogo?.google_client_id && !esEscritorio;
+const googleDisponible = () => !!catalogo?.google_client_id;
 
-/** Botón oficial de Google (solo en la web y si está configurado). alRecibir recibe el credential. */
+/** Carga una vez el script de Google (Google Identity Services). */
+let gis = null;
+const cargarGis = () => (gis ??= new Promise((ok, fallo) => {
+  if (window.google?.accounts) { ok(); return; }
+  document.head.append(el('script', { src: 'https://accounts.google.com/gsi/client', async: true, onload: ok,
+    onerror: () => { gis = null; fallo(new Error('No se pudo cargar Google')); } }));
+}));
+
+/** Botón oficial de Google (en la web y si está configurado). alRecibir recibe el credential. */
 function botonGoogle(alRecibir, texto = 'continue_with') {
   if (!googleDisponible()) return null;
   const caja = el('div', { class: 'google' });
-  const pintar = () => {
+  cargarGis().then(() => {
     google.accounts.id.initialize({ client_id: catalogo.google_client_id, callback: async r => {
       try { await alRecibir(r.credential); } catch (e) { aviso(e.message, 'error'); }
     } });
     google.accounts.id.renderButton(caja, { theme: 'outline', size: 'large', text: texto, locale: 'es', width: 300 });
-  };
-  if (window.google?.accounts) pintar();
-  else document.head.append(el('script', { src: 'https://accounts.google.com/gsi/client', async: true, onload: pintar }));
+  }, e => poner(caja, el('p', { class: 'msg error' }, e.message)));
   return caja;
 }
 
-/** Botón de Google + separador "o con tu email". En la app de escritorio no sale (Google solo va en la web). */
+/*
+ * App de escritorio: Google no deja iniciar sesión dentro de la ventana de una app, así que se hace en el navegador.
+ * La app (Rust, src-tauri/src/main.rs) abre la web en #/escritorio/<puerto>/<estado> y espera en http://127.0.0.1:<puerto>.
+ * La web, con la sesión iniciada, pide un código de 2 minutos y se lo manda a la app; la app lo cambia por su sesión.
+ */
+async function entrarPorNavegador(boton) {
+  const invoke = window.__TAURI__?.core?.invoke;
+  if (!invoke) { aviso('Esta versión de la app no puede abrir el navegador', 'error'); return; }
+  boton.disabled = true;
+  aviso('Inicia sesión en el navegador que se ha abierto');
+  try {
+    const { codigo, estado } = await invoke('entrar_con_navegador', { web: WEB });
+    await entrar(await peticion('auth.php?accion=canjear-escritorio', { method: 'POST', body: { codigo, estado } }));
+  } catch (e) { aviso(String(e?.message ?? e), 'error'); }
+  finally { boton.disabled = false; }
+}
+
+/** Web abierta desde la app de escritorio: se apunta adónde volver y, si hace falta, se inicia sesión. */
+export async function vistaEscritorio(raiz, puerto, estado) {
+  sessionStorage.setItem('escritorio', JSON.stringify({ puerto: +puerto, estado, hora: Date.now() }));
+  if (!sesion()) { location.replace('#/login'); return; }
+  poner(raiz, el('p', { class: 'nota centro' }, 'Conectando con la app de escritorio…'));
+  try { await completarEscritorio(); } catch (e) { poner(raiz, el('p', { class: 'msg error' }, e.message)); }
+}
+
+async function completarEscritorio() {
+  const p = JSON.parse(sessionStorage.getItem('escritorio') || 'null');
+  sessionStorage.removeItem('escritorio');
+  if (!p || Date.now() - p.hora > 5 * 60 * 1000) { location.hash = '#/equipos'; return; }   // la app ya no espera
+  const { codigo } = await peticion('auth.php?accion=codigo-escritorio', { method: 'POST', body: { estado: p.estado } });
+  location.href = `http://127.0.0.1:${p.puerto}/?codigo=${encodeURIComponent(codigo)}&estado=${encodeURIComponent(p.estado)}`;
+}
+
+/** Botón de Google + separador "o con tu email". En la app de escritorio abre el navegador. */
 function entrarConGoogle(texto) {
-  if (esEscritorio) return null;
   const separador = el('div', { class: 'separador' }, 'o con tu email');
+  if (esEscritorio && googleDisponible()) {
+    const boton = el('button', { class: 'google', type: 'button', onclick: () => entrarPorNavegador(boton) }, iconoGoogle(), texto);
+    return [boton, el('p', { class: 'nota centro' }, 'Se abre en tu navegador y vuelve aquí solo.'), separador];
+  }
   if (!googleDisponible()) {
     // Mientras no haya google_client_id en config.php se ve el botón, pero desactivado
     return [el('button', { class: 'google', type: 'button', disabled: true, title: 'Falta configurar google_client_id en config.php' },
@@ -68,8 +114,10 @@ function entrarConGoogle(texto) {
 /* ---------- Iniciar sesión ---------- */
 
 export function vistaLogin(raiz) {
+  const paraApp = !!sessionStorage.getItem('escritorio');
   poner(raiz,
-    el('div', { class: 'encabezado' }, el('h1', {}, 'Iniciar sesión'), el('p', { class: 'sub' }, 'Entra para guardar tus equipos.')),
+    el('div', { class: 'encabezado' }, el('h1', {}, 'Iniciar sesión'),
+      el('p', { class: 'sub' }, paraApp ? 'Entra para conectar la app de escritorio de Poketon.' : 'Entra para guardar tus equipos.')),
     entrarConGoogle('Continuar con Google'),
     formulario([
       campoForm('Email', input('email', 'email', { autocomplete: 'email', placeholder: 'tu@email.com' })),
@@ -168,16 +216,32 @@ export async function vistaCuenta(raiz) {
 
   const salir = () => { cerrarSesion(); window.dispatchEvent(new Event('sesion')); location.hash = '#/'; };
 
-  // Vincular Google: el botón oficial de Google aparece al pulsar "Vincular"
+  // Vincular Google: al pulsar "Vincular" se abre directamente la ventana de Google (cliente de tokens de Google
+  // Identity Services); el servidor comprueba el access_token con Google. El script se carga ya, para que la
+  // ventana se abra en el mismo clic (si no, el navegador la bloquearía como ventana emergente).
+  const puedeVincular = googleDisponible() && !esEscritorio;
+  let clienteGoogle = null;
+  if (puedeVincular && !u.tiene_google) {
+    cargarGis().then(() => {
+      clienteGoogle = google.accounts.oauth2.initTokenClient({
+        client_id: catalogo.google_client_id, scope: 'openid email',
+        callback: async r => {
+          if (r.error) { aviso('No se pudo vincular la cuenta de Google', 'error'); return; }
+          try {
+            await peticion('auth.php?accion=vincular-google', { method: 'POST', body: { access_token: r.access_token } });
+            aviso('Cuenta de Google vinculada');
+            vistaCuenta(raiz);
+          } catch (e) { aviso(e.message, 'error'); }
+        },
+      });
+    }, () => {});
+  }
   const filaGoogle = el('section', { class: 'tarjeta-fila' },
     el('div', {}, el('b', {}, 'Cuenta de Google'), el('span', { class: 'tenue' }, u.tiene_google ? 'Vinculada' : 'No vinculada')),
-    !u.tiene_google && el('button', { class: 'btn-sec-mini', disabled: !googleDisponible(),
-      title: googleDisponible() ? '' : 'Solo desde la web', onclick: e => {
-        e.target.replaceWith(botonGoogle(async credential => {
-          await peticion('auth.php?accion=vincular-google', { method: 'POST', body: { credential } });
-          aviso('Cuenta de Google vinculada');
-          vistaCuenta(raiz);
-        }, 'signin_with'));
+    !u.tiene_google && el('button', { class: 'btn-sec-mini', disabled: !puedeVincular,
+      title: puedeVincular ? '' : esEscritorio ? 'Vincúlala desde la web' : 'Falta configurar google_client_id', onclick: () => {
+        if (clienteGoogle) clienteGoogle.requestAccessToken();
+        else aviso('Cargando Google… vuelve a pulsar en un momento');
       } }, 'Vincular'));
 
   poner(raiz,

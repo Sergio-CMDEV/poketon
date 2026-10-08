@@ -163,11 +163,14 @@ async function pintarFicha(caja, d) {
       el('button', { role: 'tab', 'aria-selected': String(estado.tab === idTab), onclick: () => { estado.tab = idTab; pintarFicha(caja, d); } }, txt)));
 
   poner(caja, cabecera, filaFormas, pestañas, panel);
+  // La ficha completa (stats, evolución, sets) se pide ya, aunque se esté en "Tipos": al cambiar de pestaña sale al momento
+  const precarga = d.cargar();
+  precarga.catch(() => {});
 
   if (estado.tab === 'tipos') { poner(panel, debilidades(d.tipos, d.tabla)); return; }
   poner(panel, el('p', { class: 'nota' }, 'Cargando…'));
   try {
-    const f = await d.cargar();
+    const f = await precarga;
     if (estado.tab === 'stats') poner(panel, stats(f, d.gen));
     if (estado.tab === 'evo') poner(panel, d.evolucion(f));
     if (estado.tab === 'sets') poner(panel, await d.sets(f));

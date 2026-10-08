@@ -10,7 +10,7 @@ import { vistaObjetos } from './vistas/objetos.js';
 import { vistaEquipos } from './vistas/equipos.js';
 import { vistaEditor } from './vistas/editor.js';
 import { vistaShowdown } from './vistas/showdown.js';
-import { vistaLogin, vistaRegistro, vistaRecuperar, vistaRestablecer, vistaCuenta, vistaPrivacidad } from './vistas/cuenta.js';
+import { vistaLogin, vistaRegistro, vistaRecuperar, vistaRestablecer, vistaCuenta, vistaPrivacidad, vistaEscritorio } from './vistas/cuenta.js';
 
 const cabecera = document.getElementById('cabecera');
 const vista = document.getElementById('vista');
@@ -31,6 +31,7 @@ const RUTAS = [
   [/^#\/recuperar$/,                  { logo: true },                          'auth',      () => vistaRecuperar(vista)],
   [/^#\/restablecer\/([a-f0-9]+)$/,   { logo: true },                          'auth',      token => vistaRestablecer(vista, token)],
   [/^#\/cuenta$/,                     { volver: '#/equipos', texto: '← Volver' }, 'estrecha cuenta', () => vistaCuenta(vista)],
+  [/^#\/escritorio\/(\d+)\/([\w-]+)$/,  { logo: true },                         'auth',      (puerto, estado) => vistaEscritorio(vista, puerto, estado)],
   [/^#\/privacidad$/,                 { logo: true },                          'auth',      () => vistaPrivacidad(vista)],
 ];
 

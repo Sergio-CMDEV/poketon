@@ -3,12 +3,14 @@
 
 import { catalogo, normalizar } from './datos.js';
 import { usarIconosLocales } from './ui.js';
+import { API, WEB, esEscritorio } from './api.js';
 
 export let anil = null;   // { tipos, pokemon, habilidades, cadenas, objetos, porId, objetoPorId }
 
 export async function cargarAnil() {
   try {
-    const r = await fetch('anil/datos.json');
+    // En la app de escritorio, del servidor (api/anil.php, con CORS); en la web, el archivo tal cual
+    const r = await fetch(esEscritorio ? `${API}/anil.php` : 'anil/datos.json');
     if (!r.ok) return;
     anil = await r.json();
   } catch { return; }
@@ -56,7 +58,7 @@ export const msSprite = (p, shiny) => (shiny && p.shiny ? p.msShiny : p.ms) ?? 6
 
 export const urlSprite = (p, shiny) => {
   const archivo = (shiny && p.shiny) || p.sprite;
-  return archivo ? `anil/${shiny && p.shiny ? 'shiny' : 'sprites'}/${encodeURIComponent(archivo)}` : null;
+  return archivo ? `${WEB}anil/${shiny && p.shiny ? 'shiny' : 'sprites'}/${encodeURIComponent(archivo)}` : null;
 };
 
 /** Busca el mismo Pokémon en la BD: por nombre, y para las formas por región o mega. */
@@ -109,7 +111,7 @@ export function cadenaAnil(p) {
     .map(([id, , , metodos]) => ({
       p: anil.porId.get(id),
       nivel: nivel(id),
-      metodos: metodos.map(([metodo, detalle, objeto]) => ({ metodo, detalle, icono: objeto ? `anil/objetos/${objeto}.png` : null, objeto: detalle, idAnil: objeto ?? null })),
+      metodos: metodos.map(([metodo, detalle, objeto]) => ({ metodo, detalle, icono: objeto ? `${WEB}anil/objetos/${objeto}.png` : null, objeto: detalle, idAnil: objeto ?? null })),
     }))
     .filter(n => n.p)
     .sort((a, b) => a.nivel - b.nivel);

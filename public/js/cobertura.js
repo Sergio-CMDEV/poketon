@@ -9,7 +9,9 @@ const TEXTO = { 4: '×4', 2: '×2', 0.5: '½', 0.25: '¼' };
 /** miembros: titulares [{ pokemon_id, shiny }]. Devuelve la tabla y la frase del punto débil. */
 export function tablaCobertura(miembros, gen) {
   const tabla = tablaTipos(gen);
-  const equipo = miembros.map(m => ({ p: pokemon(m.pokemon_id), shiny: m.shiny })).filter(x => x.p);
+  // Columnas en el orden de los huecos (al mover un Pokémon de sitio cambia su posición, no su lugar en la lista)
+  const equipo = miembros.slice().sort((a, b) => (a.posicion ?? 0) - (b.posicion ?? 0))
+    .map(m => ({ p: pokemon(m.pokemon_id), shiny: m.shiny })).filter(x => x.p);
   if (!equipo.length) return [el('p', { class: 'nota' }, 'Añade Pokémon para ver la cobertura del equipo.')];
 
   const rejilla = el('div', { class: 'cobertura', style: { gridTemplateColumns: `70px repeat(${equipo.length}, minmax(0, 1fr)) 44px 44px` } });

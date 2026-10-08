@@ -3,7 +3,7 @@
 // Con "Pokémon Añil" elegido se ven los objetos de ese juego (los genera scripts/anil.mjs).
 // Desde la ficha, "Equipar" da el objeto a un Pokémon de tus equipos.
 
-import { peticion, sesion } from '../api.js';
+import { peticion, sesion, WEB } from '../api.js';
 import { catalogo, mapas, normalizar, pokemon, nombre } from '../datos.js';
 import { el, sprite, spriteTira, poner, campo, iconoObjeto, iconoImagen, botonMenu, aviso, selectorGen } from '../ui.js';
 import { anil, enAnil, objetoAnil, usosObjetoAnil, urlSprite, msSprite, nombreAnil } from '../anil.js';
@@ -86,7 +86,7 @@ function filaObjeto(x, extra = '') {
 
 /** Icono de un objeto de Añil: el del juego; si no lo tiene, el del objeto oficial. */
 function iconoAnil(o, tam) {
-  if (anil.iconosObjeto?.includes(o.id)) return iconoImagen([`anil/objetos/${o.id}.png`], o.nombre, tam);
+  if (anil.iconosObjeto?.includes(o.id)) return iconoImagen([`${WEB}anil/objetos/${o.id}.png`], o.nombre, tam);
   return iconoObjeto(o.oficial, tam);
 }
 

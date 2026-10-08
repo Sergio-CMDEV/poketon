@@ -57,15 +57,34 @@ function email_valido(string $email): string
 }
 
 /** Pregunta a Google si el token de "Continuar con Google" es auténtico. Devuelve sus datos (sub, email, name…). */
-function verificar_google(string $credential): array
+/**
+ * Comprueba con Google lo que manda el navegador y devuelve sus datos (sub = id de la cuenta, email…).
+ * Vale el "credential" del botón de Google (un ID token) o un access_token de la ventana de Google
+ * (la que se abre al pulsar "Vincular"). En los dos casos tiene que ser para nuestro client_id.
+ */
+function verificar_google(array $d): array
 {
     global $CONFIG;
     if (empty($CONFIG['google_client_id'])) error_api('El inicio con Google no está configurado', 501);
-    $info = json_decode(@file_get_contents('https://oauth2.googleapis.com/tokeninfo?id_token=' . urlencode($credential)) ?: 'null', true);
-    if (!$info || ($info['aud'] ?? '') !== $CONFIG['google_client_id'] || ($info['email_verified'] ?? '') !== 'true') {
+    $consulta = !empty($d['access_token']) ? 'access_token=' . urlencode((string) $d['access_token'])
+                                           : 'id_token=' . urlencode((string) ($d['credential'] ?? ''));
+    $info = json_decode(@file_get_contents('https://oauth2.googleapis.com/tokeninfo?' . $consulta) ?: 'null', true);
+    if (!$info || ($info['aud'] ?? '') !== $CONFIG['google_client_id'] || ($info['email_verified'] ?? '') !== 'true' || empty($info['sub'])) {
         error_api('No se pudo verificar la cuenta de Google', 401);
     }
     return $info;
+}
+
+/*
+ * App de escritorio: el login con Google se hace en el navegador (Google no deja hacerlo dentro de una
+ * app con una ventana web propia). La web, ya con sesión, pide un código que dura 2 minutos y se lo pasa
+ * a la app por http://127.0.0.1; la app lo cambia por su propia sesión. El código se firma con otra clave
+ * distinta a la de las sesiones, así que no sirve como sesión aunque alguien lo vea.
+ */
+function clave_escritorio(): string
+{
+    global $CONFIG;
+    return hash_hmac('sha256', 'codigo-escritorio', $CONFIG['jwt_secret'], true);
 }
 
 switch ($accion) {
@@ -101,7 +120,7 @@ switch ($accion) {
         sesion((int) $u['id']);
 
     case 'google':
-        $info = verificar_google((string) ($d['credential'] ?? ''));
+        $info = verificar_google($d);
         $email = mb_strtolower($info['email']);
         // Ya entró antes con Google
         $u = consulta('SELECT id FROM usuario WHERE google_id = ?', [$info['sub']])[0] ?? null;
@@ -118,12 +137,29 @@ switch ($accion) {
 
     case 'vincular-google':
         $id = usuario_actual();
-        $info = verificar_google((string) ($d['credential'] ?? ''));
+        $info = verificar_google($d);
         if (consulta('SELECT 1 FROM usuario WHERE google_id = ? AND id <> ?', [$info['sub'], $id])) {
             error_api('Esa cuenta de Google ya está vinculada a otro usuario', 409);
         }
         consulta('UPDATE usuario SET google_id = ? WHERE id = ?', [$info['sub'], $id]);
         responder(usuario_publico($id));
+
+    case 'codigo-escritorio':
+        $id = usuario_actual();
+        $estado = (string) ($d['estado'] ?? '');
+        if (!preg_match('/^[A-Za-z0-9_-]{16,64}$/', $estado)) error_api('Falta el código de la app');
+        $datos = b64url(json_encode(['sub' => $id, 'estado' => $estado, 'exp' => time() + 120]));
+        responder(['codigo' => $datos . '.' . b64url(hash_hmac('sha256', $datos, clave_escritorio(), true))]);
+
+    case 'canjear-escritorio':
+        [$datos, $firma] = array_pad(explode('.', (string) ($d['codigo'] ?? ''), 2), 2, '');
+        $info = json_decode(b64url_dec($datos), true);
+        if (!hash_equals(b64url(hash_hmac('sha256', $datos, clave_escritorio(), true)), $firma) || !is_array($info)
+            || ($info['exp'] ?? 0) < time() || !hash_equals((string) ($info['estado'] ?? ''), (string) ($d['estado'] ?? ''))) {
+            error_api('El código ha caducado. Vuelve a pulsar "Continuar con Google"', 401);
+        }
+        if (!consulta('SELECT 1 FROM usuario WHERE id = ?', [(int) $info['sub']])) error_api('La cuenta ya no existe', 404);
+        sesion((int) $info['sub']);
 
     case 'yo':
         responder(usuario_publico(usuario_actual()));

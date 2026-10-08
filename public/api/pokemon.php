@@ -63,6 +63,9 @@ foreach ($evolucion as &$n) {
 }
 unset($n);
 
+// Son datos del juego (solo cambian al importar): el navegador los guarda 1 hora.
+// Si algo falla, la respuesta de error cambia esta cabecera por no-store.
+header('Cache-Control: public, max-age=3600');
 responder([
     'id'          => (int) $p['id'],
     'stats'       => $num(['ps', 'ataque', 'defensa', 'at_esp', 'def_esp', 'velocidad']),

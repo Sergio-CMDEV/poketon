@@ -3,8 +3,10 @@
 // no se sirve por http(s) de tu dominio, así que se llama a la API publicada.
 
 const API_PUBLICADA = 'https://poketon.dearbirdtw.com/api';   // al compilar el .exe se puede cambiar con POKETON_API
-const esEscritorio = location.hostname === 'tauri.localhost' || location.protocol === 'tauri:';
+export const esEscritorio = location.hostname === 'tauri.localhost' || location.protocol === 'tauri:';
 export const API = esEscritorio ? API_PUBLICADA : '/api';
+// Raíz de la web: en la app de escritorio, la del servidor (de ahí salen la hoja de iconos y Pokémon Añil)
+export const WEB = esEscritorio ? API_PUBLICADA.replace(/\/api\/?$/, '/') : '';
 
 /* ---------- Sesión (token JWT guardado en el navegador) ---------- */
 

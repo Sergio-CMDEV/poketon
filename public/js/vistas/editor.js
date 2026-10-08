@@ -233,8 +233,8 @@ export function vistaEditor(raiz) {
     try {
       Object.assign(eq, await guardarEnCuenta(eq));
       nombreInput.value = eq.nombre;
-      // Los miembros ahora son los que devuelve el servidor: se vuelve a pintar para que el cuadro edite esos
-      pintarSlots(); pintarPanel();
+      // Los miembros ahora son los que devuelve el servidor: se vuelve a pintar todo para que el cuadro edite esos
+      pintarSlots(); pintarPanel(); pintarCobertura();
       estado(true);
     } catch (e) {
       if (e.status === 401) { guardarBorrador(eq); aviso('Tu sesión ha caducado. Entra y se guardará', 'error'); location.hash = '#/login'; return; }

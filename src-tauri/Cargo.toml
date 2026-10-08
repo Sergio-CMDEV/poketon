@@ -10,6 +10,9 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+open = "5"          # abrir el navegador para el login con Google
+getrandom = "0.3"   # código aleatorio de un solo uso para ese login
 
 [profile.release]
 strip = true

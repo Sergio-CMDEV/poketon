@@ -1,6 +1,7 @@
 // Pequeñas utilidades para crear la interfaz.
 
 import { COLOR_TIPO, nombreTipo, urlsSprite } from './datos.js';
+import { WEB } from './api.js';
 
 /** Crea un elemento: el('button', { class: 'x', onclick: fn }, 'texto', otroElemento) */
 export function el(tag, attrs = {}, ...hijos) {
@@ -16,7 +17,7 @@ export function el(tag, attrs = {}, ...hijos) {
     else if (k in e && typeof v !== 'string') e[k] = v;
     else e.setAttribute(k, v === true ? '' : v);
   }
-  for (const h of hijos.flat()) if (h !== null && h !== undefined && h !== false) e.append(h.nodeType ? h : String(h));
+  for (const h of hijos.flat(Infinity)) if (h !== null && h !== undefined && h !== false) e.append(h.nodeType ? h : String(h));
   return e;
 }
 
@@ -36,10 +37,11 @@ export function sprite(id, { shiny = false, tam = 96, alt = '' } = {}) {
 
 /* ---------- Iconos de objetos ---------- */
 // 1) Hoja de iconos de Pokémon Showdown (la descarga import.php en img/objetos.png; si no está, se usa la de su web).
+//    En la app de escritorio se pide al servidor (WEB): dentro del .exe no va, y la web de Showdown no la sirve a otras apps.
 //    Cada icono mide 24 px y hay 16 por fila; `icono` es su posición en la hoja.
 // 2) Si el objeto no está en Showdown, el de PokéSprite (hasta la Gen 8). 3) El de PokeAPI. 4) Si no hay ninguno, un círculo.
 const HOJA_REMOTA = 'https://play.pokemonshowdown.com/sprites/itemicons-sheet.png';
-let hoja = 'img/objetos.png';
+let hoja = `${WEB}img/objetos.png`;
 const prueba = new Image();
 prueba.onerror = () => {
   hoja = HOJA_REMOTA;
@@ -62,7 +64,7 @@ export function iconoObjeto(o, tam = 24) {
     o.imagen && `https://raw.githubusercontent.com/msikma/pokesprite/master/items/${o.imagen}.png`,
     o.identificador && pokeapi(o.identificador),
     o.identificador?.includes('--') && pokeapi(o.identificador.split('--')[0]),   // "ss-ticket--letsgo" → "ss-ticket"
-    iconosLocales.has(local) && `anil/objetos/${local}.png`,
+    iconosLocales.has(local) && `${WEB}anil/objetos/${local}.png`,
   ].filter(Boolean);
   return urls.length ? iconoImagen(urls, o.nombre, tam) : iconoVacio(tam);
 }
@@ -203,5 +205,6 @@ export function iconoGoogle() {
 
 /** Como replaceChildren pero ignorando los huecos (null/false), que si no se pintarían como texto "null". */
 export function poner(nodo, ...hijos) {
-  nodo.replaceChildren(...hijos.flat().filter(h => h !== null && h !== undefined && h !== false));
+  // flat(Infinity): las listas pueden venir anidadas (p. ej. [cabecera, [habilidad, habilidad]])
+  nodo.replaceChildren(...hijos.flat(Infinity).filter(h => h !== null && h !== undefined && h !== false));
 }
