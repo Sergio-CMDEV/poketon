@@ -15,7 +15,7 @@ return [
     'jwt_secret' => 'cambia-esto-por-una-clave-larga-y-aleatoria',
 
     // Dirección de la web (para el enlace de "recuperar contraseña")
-    'app_url' => 'http://localhost:8000',   // en el servidor: https://poketon.online
+    'app_url' => 'http://localhost:8000',   // en el servidor: https://pokemon.dearbirdtw.com (luego https://poketon.online)
 
     // Orígenes que pueden llamar a la API desde otro sitio: la app de escritorio (Tauri)
     'cors' => ['http://tauri.localhost', 'tauri://localhost'],
