@@ -97,8 +97,12 @@ switch (metodo() . ' ' . $accion) {
             consulta('UPDATE conversacion_miembro SET ultimo_leido = GREATEST(ultimo_leido, (SELECT COALESCE(MAX(id), 0) FROM mensaje WHERE conversacion_id = ?))
                        WHERE conversacion_id = ? AND usuario_id = ?', [$conv, $conv, $yo]);
         }
+        $perfil = perfil_publico($u);
+        // Si ya no sois amigos (o hay un bloqueo), el chat viejo se sigue viendo, pero no su conexión: si no, quien
+        // ha sido bloqueado podría seguir mirando aquí cuándo está en línea la otra persona
+        if (!$amigos) $perfil = ['en_linea' => false, 'hace' => null] + $perfil;
         responder([
-            'amigo' => perfil_publico($u),
+            'amigo' => $perfil,
             'mensajes' => array_map(fn($m) => mensaje_publico($m, $yo), $mensajes),
             'hay_mas' => $hay_mas,
             'visto_hasta' => $visto,   // los míos con id <= este ya los ha visto
@@ -120,7 +124,7 @@ switch (metodo() . ' ' . $accion) {
             if (!$eq) error_api('Equipo no encontrado', 404);
             $equipo = json_encode(['nombre' => $eq['nombre'], 'generacion' => $eq['generacion'], 'miembros' => $eq['miembros']], JSON_UNESCAPED_UNICODE);
         } else {
-            $texto = trim(str_replace("\r", '', (string) ($d['texto'] ?? '')));
+            $texto = texto_limpio((string) ($d['texto'] ?? ''), true);
             if ($texto === '') error_api('El mensaje está vacío');
             if (mb_strlen($texto) > MAX_TEXTO) error_api('Máximo ' . MAX_TEXTO . ' caracteres');
         }

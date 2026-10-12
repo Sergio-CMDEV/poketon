@@ -9,15 +9,17 @@ cd "$(dirname "$0")/.."
 grep -q "cambia-esto" config.php && { echo "config.php tiene todavía valores de ejemplo ('cambia-esto')"; exit 1; }
 
 # Fotos de perfil: la única carpeta donde escribe PHP (82 = www-data en Alpine)
-mkdir -p public/fotos
+mkdir -p public/fotos db/cache
 chown 82:82 public/fotos
 
-docker compose up -d --build
+# --force-recreate: nginx.conf va montado como archivo y tras un git pull el contenedor seguiría viendo el viejo
+docker compose up -d --build --force-recreate
 
 if [ "$1" = "--importar" ]; then
     echo "Llenando la base de datos (tarda menos de un minuto)…"
     # public/img con escritura solo para esto: el importador guarda ahí la hoja de iconos de objetos
-    docker compose run --rm -v "$PWD/public/img:/var/www/public/img" php php /var/www/db/import.php
+    # db/cache guarda las descargas: si una se atasca, al relanzarlo solo baja las que faltan
+    docker compose run --rm -v "$PWD/public/img:/var/www/public/img" -v "$PWD/db/cache:/var/www/db/cache" php php /var/www/db/import.php
 fi
 
 docker compose ps

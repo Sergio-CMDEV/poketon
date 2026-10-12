@@ -367,13 +367,13 @@ CREATE TABLE mensaje (
   CHECK (CHAR_LENGTH(texto) BETWEEN 1 AND 1000)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Acciones con límite (solicitudes, búsquedas de código, fotos: 3 al día), para frenar abusos.
+-- Acciones con límite (solicitudes, búsquedas de código, fotos: 3 al día, cuentas y emails de recuperar por IP), para frenar abusos.
 -- Se borran las de más de 2 días.
 CREATE TABLE accion_limitada (
   id          BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   usuario_id  INT UNSIGNED NULL,                         -- NULL si no hay sesión (enlace de amigo)
   ip          VARCHAR(45) NOT NULL,
-  tipo        ENUM('solicitud','buscar','foto') NOT NULL,
+  tipo        ENUM('solicitud','buscar','foto','registro','recuperar') NOT NULL,
   fecha       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   INDEX (tipo, usuario_id, fecha),
   INDEX (tipo, ip, fecha),

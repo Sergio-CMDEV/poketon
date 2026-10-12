@@ -156,6 +156,17 @@ function usuario_actual(): int
     return (int) $datos['sub'];
 }
 
+/**
+ * Texto que escribe el usuario y ven otros (nombres, mensajes, equipos), sin caracteres invisibles: los de control,
+ * los que dan la vuelta al texto (con ellos "‮gnp.exe" se ve como "exe.png") y los espacios de ancho cero.
+ * El de unión (U+200D) se deja: lo usan los emojis compuestos.
+ */
+function texto_limpio(string $s, bool $multilinea = false): string
+{
+    $s = preg_replace('/[\x{200B}\x{200E}\x{200F}\x{202A}-\x{202E}\x{2066}-\x{2069}\x{FEFF}]/u', '', str_replace("\t", ' ', $s)) ?? '';
+    return trim(preg_replace($multilinea ? '/[^\P{Cc}\n]/u' : '/\p{Cc}/u', '', $s) ?? '');
+}
+
 /** IP de quien hace la petición (detrás del proxy, nginx la pone con real_ip). */
 function ip(): string
 {

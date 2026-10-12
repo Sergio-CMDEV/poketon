@@ -50,11 +50,12 @@ function miembros_validos(mixed $miembros): array
         $anil = isset($m['anil_id']) && $m['anil_id'] !== '' ? (string) $m['anil_id'] : null;
         if ($anil !== null && !preg_match('/^[A-Z0-9_]{1,40}$/', $anil)) error_api('Pokémon de Añil no válido');
         if ($anil === null && ($m['pokemon_id'] ?? null) === null) error_api('Falta el Pokémon');
+        $apodo = mb_substr(texto_limpio(is_string($m['apodo'] ?? null) ? $m['apodo'] : ''), 0, 20);
         $out[] = [
             'posicion' => $pos,
             'pokemon_id' => ($m['pokemon_id'] ?? null) === null ? null : $int($m['pokemon_id'], 1, 65535, 'pokemon_id'),
             'anil_id' => $anil,
-            'apodo' => isset($m['apodo']) && $m['apodo'] !== '' ? mb_substr((string) $m['apodo'], 0, 20) : null,
+            'apodo' => $apodo === '' ? null : $apodo,
             'objeto_id' => $opc($m['objeto_id'] ?? null),
             'habilidad_id' => $opc($m['habilidad_id'] ?? null),
             'naturaleza_id' => $opc($m['naturaleza_id'] ?? null),
@@ -102,7 +103,7 @@ switch (metodo()) {
         $d = cuerpo();
         $miembros = miembros_validos($d['miembros'] ?? null);
         $gen = filter_var($d['generacion'] ?? 9, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 9]]) ?: 9;
-        $nombre = mb_substr(trim((string) ($d['nombre'] ?? '')), 0, 40);
+        $nombre = mb_substr(texto_limpio((string) ($d['nombre'] ?? '')), 0, 40);
         if (metodo() === 'PUT') $id = equipo_propio($id ?: null, $usuario);
         elseif (consulta('SELECT COUNT(*) n FROM equipo WHERE usuario_id = ?', [$usuario])[0]['n'] >= MAX_EQUIPOS) {
             error_api('Has llegado al máximo de ' . MAX_EQUIPOS . ' equipos. Borra uno para guardar este', 409);

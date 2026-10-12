@@ -39,6 +39,7 @@ function sesion(int $id): never
 function validar_password(string $p): void
 {
     if (mb_strlen($p) < 8) error_api('La contraseña debe tener al menos 8 caracteres');
+    if (mb_strlen($p) > 200) error_api('La contraseña puede tener como mucho 200 caracteres');
 }
 
 /*
@@ -96,7 +97,10 @@ function clave_escritorio(): string
 switch ($accion) {
 
     case 'registro':
-        $nombre = trim((string) ($d['nombre'] ?? ''));
+        // Cuentas nuevas por IP: sin límite, un script crea cientos por minuto (y cada una cuesta un Argon2id).
+        // 30 por hora deja registrarse a toda una clase desde la misma red
+        limite('registro', 30, 3600, null, 'Se han creado muchas cuentas desde tu conexión. Prueba dentro de un rato');
+        $nombre = texto_limpio((string) ($d['nombre'] ?? ''));
         $email = email_valido((string) ($d['email'] ?? ''));
         $password = (string) ($d['password'] ?? '');
         if ($nombre === '' || mb_strlen($nombre) > 30) error_api('El nombre debe tener entre 1 y 30 caracteres');
@@ -105,7 +109,9 @@ switch ($accion) {
         if (consulta('SELECT 1 FROM usuario WHERE email = ?', [$email])) error_api('Ya existe una cuenta con ese email', 409);
         consulta('INSERT INTO usuario (email, nombre, password_hash) VALUES (?, ?, ?)',
                  [$email, $nombre, hash_password($password)]);
-        sesion((int) db()->lastInsertId());
+        $id = (int) db()->lastInsertId();
+        apuntar('registro', null);
+        sesion($id);
 
     case 'login':
         $email = mb_strtolower(trim((string) ($d['email'] ?? '')));
@@ -142,7 +148,7 @@ switch ($accion) {
         if (consulta('SELECT 1 FROM usuario WHERE email = ?', [$email])) {
             error_api('Ya hay una cuenta con ese email. Entra con tu contraseña y vincula Google desde Mi cuenta', 409);
         }
-        $nombre = trim((string) ($info['given_name'] ?? '')) ?: trim((string) ($info['name'] ?? '')) ?: 'Entrenador';
+        $nombre = texto_limpio((string) ($info['given_name'] ?? '')) ?: texto_limpio((string) ($info['name'] ?? '')) ?: 'Entrenador';
         consulta('INSERT INTO usuario (email, nombre, google_id) VALUES (?, ?, ?)', [$email, mb_substr($nombre, 0, 30), $info['sub']]);
         sesion((int) db()->lastInsertId());
 
@@ -202,8 +208,14 @@ switch ($accion) {
         responder(['ok' => true]);
 
     case 'recuperar':
+        limite('recuperar', 10, 3600, null, 'Demasiadas peticiones. Prueba dentro de un rato');
+        apuntar('recuperar', null);
         $email = mb_strtolower(trim((string) ($d['email'] ?? '')));
-        $u = consulta('SELECT id FROM usuario WHERE email = ?', [$email])[0] ?? null;
+        // La BD compara sin tildes ni mayúsculas e ignora caracteres invisibles: "ana@gmaíl.com" encuentra la cuenta de
+        // "ana@gmail.com". Por eso el enlace se manda SIEMPRE al email guardado, nunca al que se ha escrito: si no,
+        // con un dominio parecido (gmaíl.com) cualquiera recibiría el enlace de otra cuenta
+        $u = strlen($email) <= 254 && filter_var($email, FILTER_VALIDATE_EMAIL)
+            ? (consulta('SELECT id, email FROM usuario WHERE email = ?', [$email])[0] ?? null) : null;
         // Como mucho un email cada 5 minutos por cuenta (un token se crea con 30 min de vida: si le quedan más de 25, es reciente)
         if ($u && consulta('SELECT 1 FROM token_recuperacion WHERE usuario_id = ? AND caduca_en > NOW() + INTERVAL 25 MINUTE', [$u['id']])) $u = null;
         if (random_int(1, 20) === 1) consulta('DELETE FROM token_recuperacion WHERE caduca_en < NOW() - INTERVAL 1 DAY');   // limpieza
@@ -214,7 +226,7 @@ switch ($accion) {
             $enlace = rtrim($CONFIG['app_url'] ?? 'http://localhost:8000', '/') . "/#/restablecer/$token";
             // Si el email falla, se apunta en el log y se responde igual: un error diría que la cuenta existe
             try {
-                enviar_email($email, 'Recupera tu contraseña',
+                enviar_email($u['email'], 'Recupera tu contraseña',
                     "Hola,\n\nPara crear una contraseña nueva abre este enlace (caduca en 30 minutos):\n$enlace\n\nSi no lo has pedido tú, ignora este email.");
             } catch (Throwable $e) { error_log('Recuperar contraseña: ' . $e->getMessage()); }
         }

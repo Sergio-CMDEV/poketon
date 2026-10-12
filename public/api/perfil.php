@@ -51,7 +51,7 @@ switch (metodo() . ' ' . $accion) {
 
     case 'POST ':
         $d = cuerpo();
-        $nombre = trim((string) ($d['nombre'] ?? ''));
+        $nombre = texto_limpio((string) ($d['nombre'] ?? ''));
         $usuario = mb_strtolower(trim((string) ($d['usuario'] ?? '')));
         if ($nombre === '' || mb_strlen($nombre) > 30) error_api('El nombre debe tener entre 1 y 30 caracteres');
         if (!preg_match(FORMATO_USUARIO, $usuario)) error_api('El nombre de usuario lleva de 3 a 20 letras (sin tildes), números o _');
