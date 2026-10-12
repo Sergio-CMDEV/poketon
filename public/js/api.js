@@ -2,7 +2,7 @@
 // En la web la API está en el mismo sitio (/api). En la app de escritorio (Tauri) la página
 // no se sirve por http(s) de tu dominio, así que se llama a la API publicada.
 
-const API_PUBLICADA = 'https://pokemon.dearbirdtw.com/api';   // dominio provisional (luego poketon.online); al compilar se puede cambiar con POKETON_API
+const API_PUBLICADA = 'https://poketon.dearbirdtw.com/api';   // dominio provisional (luego poketon.online); al compilar se puede cambiar con POKETON_API
 export const esEscritorio = location.hostname === 'tauri.localhost' || location.protocol === 'tauri:';
 export const API = esEscritorio ? API_PUBLICADA : '/api';
 // Raíz de la web: en la app de escritorio, la del servidor (de ahí salen la hoja de iconos y Pokémon Añil)
