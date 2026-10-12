@@ -81,7 +81,10 @@ export async function equiparEnEquipo(eq, posicion, objetoId) {
 export const crearEquipoCon = pokemonId =>
   peticion('equipos.php', { method: 'POST', body: { nombre: '', generacion: genActual(), miembros: [nuevoMiembro(pokemonId, 1)] } });
 
-export const borrarEquipo = id => peticion(`equipos.php?id=${id}`, { method: 'DELETE' });
+export async function borrarEquipo(id) {
+  await peticion(`equipos.php?id=${id}`, { method: 'DELETE' });
+  if (borrador().id === id) guardarBorrador(equipoVacio());   // si era el que se estaba editando, ya no existe
+}
 
 /** Tras iniciar sesión: si había un equipo montado sin guardar, se sube a la cuenta. */
 export async function subirBorradorPendiente() {

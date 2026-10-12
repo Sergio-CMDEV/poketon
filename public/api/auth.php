@@ -6,22 +6,28 @@
  *   POST google           {credential}                    → {token, usuario}
  *   POST vincular-google  {credential}                    → usuario (con sesión iniciada)
  *   GET  yo                                               → usuario de la sesión
- *   POST cambiar-password {actual, nueva}
- *   POST borrar-cuenta    {confirmacion: "ELIMINAR"}
+ *   POST cambiar-password {actual, nueva}                → {token}: la sesión nueva (las demás se cierran)
+ *   POST cerrar-sesiones                                  → {token}: cierra la sesión en los demás dispositivos
+ *   POST borrar-cuenta    {confirmacion: "ELIMINAR", password?}  (también su foto, amigos y chats)
  *   POST recuperar        {email}                         → envía el enlace por email
  *   POST restablecer      {token, password}
  */
 require __DIR__ . '/../../src/lib.php';
+require __DIR__ . '/../../src/online.php';
 
 $accion = $_GET['accion'] ?? '';
 $d = metodo() === 'POST' ? cuerpo() : [];
 
 function usuario_publico(int $id): array
 {
-    $u = consulta('SELECT id, nombre, email, password_hash IS NOT NULL AS tiene_password, google_id IS NOT NULL AS tiene_google
+    asegurar_perfil($id);   // @usuario y código de amigo (las cuentas de antes del online no los tienen)
+    $u = consulta('SELECT id, nombre, email, nombre_usuario, foto, avatar_pokemon_id,
+                          password_hash IS NOT NULL AS tiene_password, google_id IS NOT NULL AS tiene_google
                      FROM usuario WHERE id = ?', [$id])[0] ?? null;
     if (!$u) error_api('La cuenta no existe', 401);
     return ['id' => (int) $u['id'], 'nombre' => $u['nombre'], 'email' => $u['email'],
+            'usuario' => $u['nombre_usuario'], 'foto' => $u['foto'],
+            'avatar' => $u['avatar_pokemon_id'] === null ? null : (int) $u['avatar_pokemon_id'],
             'tiene_password' => (bool) $u['tiene_password'], 'tiene_google' => (bool) $u['tiene_google']];
 }
 
@@ -52,7 +58,7 @@ function hash_password(string $password): string
 function email_valido(string $email): string
 {
     $email = mb_strtolower(trim($email));
-    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) error_api('El email no es válido');
+    if (strlen($email) > 254 || !filter_var($email, FILTER_VALIDATE_EMAIL)) error_api('El email no es válido');
     return $email;
 }
 
@@ -103,16 +109,21 @@ switch ($accion) {
 
     case 'login':
         $email = mb_strtolower(trim((string) ($d['email'] ?? '')));
-        $ip = $_SERVER['REMOTE_ADDR'] ?? '';
-        // Bloqueo: 5 intentos fallidos en 15 minutos
-        $fallos = consulta('SELECT COUNT(*) n FROM intento_login WHERE email = ? AND fecha > NOW() - INTERVAL 15 MINUTE', [$email])[0]['n'];
-        if ($fallos >= 5) error_api('Demasiados intentos. Prueba de nuevo en 15 minutos', 429);
+        if (strlen($email) > 254) error_api('Email o contraseña incorrectos', 401);
+        $ip = ip();
+        // Bloqueo por email Y por IP: 5 fallos seguidos desde una IP bloquean ese email 15 min solo para esa IP
+        // (así nadie puede dejar fuera al dueño de una cuenta), y 20 fallos desde una IP la bloquean para todos
+        // los emails (así no se puede probar una contraseña contra muchas cuentas)
+        $fallos = consulta('SELECT COUNT(*) n FROM intento_login WHERE email = ? AND ip = ? AND fecha > NOW() - INTERVAL 15 MINUTE', [$email, $ip])[0]['n'];
+        $fallosIp = consulta('SELECT COUNT(*) n FROM intento_login WHERE ip = ? AND fecha > NOW() - INTERVAL 15 MINUTE', [$ip])[0]['n'];
+        if ($fallos >= 5 || $fallosIp >= 20) error_api('Demasiados intentos. Prueba de nuevo en 15 minutos', 429);
         $u = consulta('SELECT id, password_hash FROM usuario WHERE email = ?', [$email])[0] ?? null;
         if (!$u || !$u['password_hash'] || !password_verify((string) ($d['password'] ?? ''), $u['password_hash'])) {
             consulta('INSERT INTO intento_login (email, ip) VALUES (?, ?)', [$email, $ip]);
+            if (random_int(1, 20) === 1) consulta('DELETE FROM intento_login WHERE fecha < NOW() - INTERVAL 1 DAY');   // limpieza
             error_api('Email o contraseña incorrectos', 401);   // sin decir cuál de los dos falla
         }
-        consulta('DELETE FROM intento_login WHERE email = ?', [$email]);
+        consulta('DELETE FROM intento_login WHERE email = ? AND ip = ?', [$email, $ip]);
         // Hash antiguo (bcrypt) o con otros parámetros: se guarda de nuevo en Argon2id
         if (password_needs_rehash($u['password_hash'], PASSWORD_ARGON2ID, OPCIONES_HASH)) {
             consulta('UPDATE usuario SET password_hash = ? WHERE id = ?', [hash_password((string) $d['password']), $u['id']]);
@@ -131,8 +142,8 @@ switch ($accion) {
         if (consulta('SELECT 1 FROM usuario WHERE email = ?', [$email])) {
             error_api('Ya hay una cuenta con ese email. Entra con tu contraseña y vincula Google desde Mi cuenta', 409);
         }
-        consulta('INSERT INTO usuario (email, nombre, google_id) VALUES (?, ?, ?)',
-                 [$email, mb_substr($info['given_name'] ?? $info['name'] ?? 'Entrenador', 0, 30), $info['sub']]);
+        $nombre = trim((string) ($info['given_name'] ?? '')) ?: trim((string) ($info['name'] ?? '')) ?: 'Entrenador';
+        consulta('INSERT INTO usuario (email, nombre, google_id) VALUES (?, ?, ?)', [$email, mb_substr($nombre, 0, 30), $info['sub']]);
         sesion((int) db()->lastInsertId());
 
     case 'vincular-google':
@@ -169,25 +180,43 @@ switch ($accion) {
         $hash = consulta('SELECT password_hash FROM usuario WHERE id = ?', [$id])[0]['password_hash'] ?? null;
         if ($hash && !password_verify((string) ($d['actual'] ?? ''), $hash)) error_api('La contraseña actual no es correcta', 403);
         validar_password((string) ($d['nueva'] ?? ''));
-        consulta('UPDATE usuario SET password_hash = ? WHERE id = ?', [hash_password((string) $d['nueva']), $id]);
-        responder(['ok' => true]);
+        // Sube la versión de sesión: las sesiones de los demás dispositivos se cierran; esta sigue con un token nuevo
+        consulta('UPDATE usuario SET password_hash = ?, version_sesion = version_sesion + 1 WHERE id = ?', [hash_password((string) $d['nueva']), $id]);
+        responder(['ok' => true, 'token' => crear_token($id)]);
+
+    case 'cerrar-sesiones':
+        $id = usuario_actual();
+        consulta('UPDATE usuario SET version_sesion = version_sesion + 1 WHERE id = ?', [$id]);
+        responder(['ok' => true, 'token' => crear_token($id)]);
 
     case 'borrar-cuenta':
         $id = usuario_actual();
         if (($d['confirmacion'] ?? '') !== 'ELIMINAR') error_api('Escribe ELIMINAR para confirmar');
-        consulta('DELETE FROM usuario WHERE id = ?', [$id]);   // equipos y tokens se borran en cascada
+        // Con contraseña, hay que escribirla: así no basta con una sesión abierta (o robada) para borrar la cuenta
+        $hash = consulta('SELECT password_hash FROM usuario WHERE id = ?', [$id])[0]['password_hash'] ?? null;
+        if ($hash && !password_verify((string) ($d['password'] ?? ''), $hash)) error_api('La contraseña no es correcta', 403);
+        $foto = consulta('SELECT foto FROM usuario WHERE id = ?', [$id])[0]['foto'] ?? null;
+        // En cascada: equipos, tokens, amistades, solicitudes, bloqueos y sus chats 1 a 1 con todos los mensajes
+        consulta('DELETE FROM usuario WHERE id = ?', [$id]);
+        borrar_foto($foto);
         responder(['ok' => true]);
 
     case 'recuperar':
         $email = mb_strtolower(trim((string) ($d['email'] ?? '')));
         $u = consulta('SELECT id FROM usuario WHERE email = ?', [$email])[0] ?? null;
+        // Como mucho un email cada 5 minutos por cuenta (un token se crea con 30 min de vida: si le quedan más de 25, es reciente)
+        if ($u && consulta('SELECT 1 FROM token_recuperacion WHERE usuario_id = ? AND caduca_en > NOW() + INTERVAL 25 MINUTE', [$u['id']])) $u = null;
+        if (random_int(1, 20) === 1) consulta('DELETE FROM token_recuperacion WHERE caduca_en < NOW() - INTERVAL 1 DAY');   // limpieza
         if ($u) {
             $token = bin2hex(random_bytes(32));   // va en el enlace; en la BD solo se guarda su hash
             consulta('INSERT INTO token_recuperacion (usuario_id, token_hash, caduca_en) VALUES (?, ?, NOW() + INTERVAL 30 MINUTE)',
                      [$u['id'], hash('sha256', $token)]);
             $enlace = rtrim($CONFIG['app_url'] ?? 'http://localhost:8000', '/') . "/#/restablecer/$token";
-            enviar_email($email, 'Recupera tu contraseña',
-                "Hola,\n\nPara crear una contraseña nueva abre este enlace (caduca en 30 minutos):\n$enlace\n\nSi no lo has pedido tú, ignora este email.");
+            // Si el email falla, se apunta en el log y se responde igual: un error diría que la cuenta existe
+            try {
+                enviar_email($email, 'Recupera tu contraseña',
+                    "Hola,\n\nPara crear una contraseña nueva abre este enlace (caduca en 30 minutos):\n$enlace\n\nSi no lo has pedido tú, ignora este email.");
+            } catch (Throwable $e) { error_log('Recuperar contraseña: ' . $e->getMessage()); }
         }
         responder(['ok' => true]);   // misma respuesta exista o no la cuenta, para no revelar qué emails están registrados
 
@@ -197,7 +226,8 @@ switch ($accion) {
                       [hash('sha256', (string) ($d['token'] ?? ''))])[0] ?? null;
         if (!$t) error_api('El enlace ha caducado o ya se usó. Pide uno nuevo', 410);
         validar_password((string) ($d['password'] ?? ''));
-        consulta('UPDATE usuario SET password_hash = ? WHERE id = ?', [hash_password((string) $d['password']), $t['usuario_id']]);
+        // Contraseña nueva: se cierran todas las sesiones abiertas (por si alguien más la sabía)
+        consulta('UPDATE usuario SET password_hash = ?, version_sesion = version_sesion + 1 WHERE id = ?', [hash_password((string) $d['password']), $t['usuario_id']]);
         consulta('UPDATE token_recuperacion SET usado_en = NOW() WHERE id = ?', [$t['id']]);
         sesion((int) $t['usuario_id']);
 

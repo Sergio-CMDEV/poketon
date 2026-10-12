@@ -7,6 +7,8 @@ import { el, chip, sprite, aviso, campo, selectorGen, poner } from '../ui.js';
 import { borrador, guardarBorrador, guardarEnCuenta } from '../equipos.js';
 import { nuevoMiembro } from '../showdown.js';
 import { tablaCobertura } from '../cobertura.js';
+import { datosMiembro } from '../miembro.js';
+import { habilidadesAnil } from '../anil.js';
 
 let seleccion = 1;   // posición elegida (1-6 titulares, 7-8 reservas)
 
@@ -23,11 +25,11 @@ export function vistaEditor(raiz) {
   function pintarSlots() {
     poner(slots, [1, 2, 3, 4, 5, 6, 7, 8].map(pos => {
       const m = miembro(pos);
-      const p = m && pokemon(m.pokemon_id);
+      const d = m && datosMiembro(m, eq.generacion);
       return el('button', { class: `slot ${pos > 6 ? 'reserva' : ''} ${pos === seleccion ? 'on' : ''}`, 'data-pos': pos,
         onclick: () => { if (arrastrado) return; seleccion = pos; pintarSlots(); pintarPanel(); } },
-        el('span', { class: `circulo ${p ? 'lleno' : ''}` }, p ? sprite(p.id, { tam: 40, shiny: m.shiny, alt: '' }) : '+'),
-        el('small', {}, p ? p.nombre : pos > 6 ? 'Reserva' : 'Vacío'));
+        el('span', { class: `circulo ${d ? 'lleno' : ''}` }, d ? d.sprite(40) : '+'),
+        el('small', {}, d ? d.nombre : pos > 6 ? 'Reserva' : 'Vacío'));
     }));
   }
 
@@ -108,13 +110,14 @@ export function vistaEditor(raiz) {
   async function pintarPanel() {
     const m = miembro(seleccion);
     if (!m) { poner(panel, buscadorParaHueco()); return; }
-    const p = pokemon(m.pokemon_id);
+    const d = datosMiembro(m, eq.generacion);
+    const p = { nombre: d.nombre };
     const gen = eq.generacion;
     // Mientras llega la ficha se deja lo que había (atenuado) en vez de vaciar el cuadro, para que no parpadee
     if (!panel.childElementCount) poner(panel, el('p', { class: 'nota' }, 'Cargando…'));
     panel.classList.add('cargando');
     let f;
-    try { f = await ficha(p.id); } catch (e) { poner(panel, el('p', { class: 'msg error' }, e.message)); return; }
+    try { f = await fichaMiembro(m, d); } catch (e) { poner(panel, el('p', { class: 'msg error' }, e.message)); return; }
     finally { panel.classList.remove('cargando'); }
     if (miembro(seleccion) !== m) return;   // se cambió de hueco mientras cargaba
 
@@ -160,7 +163,9 @@ export function vistaEditor(raiz) {
     pintarResumenIvs();
 
     // Movimientos: avisa si no lo puede aprender, pero deja guardar
-    const aprendibles = new Set(f.movimientos.map(x => x.id));
+    // Formas propias de Añil sin especie oficial: no hay lista de movimientos, así que valen todos y no se avisa
+    const sinLista = !f.movimientos;
+    const aprendibles = new Set(sinLista ? catalogo.movimientos.map(x => x.id) : f.movimientos.map(x => x.id));
     const avisos = el('div', { style: { display: 'contents' } });
     const inputs = [0, 1, 2, 3].map(i => el('input', { list: 'dl-movs', value: mapas.movimientos.get(m.movimientos[i])?.nombre ?? '', placeholder: `Movimiento ${i + 1}` }));
     const pintarAvisos = () => {
@@ -183,8 +188,8 @@ export function vistaEditor(raiz) {
 
     poner(panel,
       el('div', { class: 'miembro-cab' },
-        sprite(p.id, { tam: 64, shiny: m.shiny, alt: nombre(p) }),
-        el('div', { class: 'ficha-info' }, el('b', {}, nombre(p)), el('div', { class: 'chips' }, tiposEn(p, gen).map(chip)),
+        d.sprite(64, d.nombre),
+        el('div', { class: 'ficha-info' }, el('b', {}, d.nombre), el('div', { class: 'chips' }, d.tipos.map(chip)),
           el('label', { class: 'nivel' }, el('span', {}, 'Nivel'), nivel)),
         el('div', { class: 'acciones-miembro' },
           el('button', { class: 'btn-contorno btn-peq', title: seleccion > 6 ? 'Pasar a los titulares' : 'Pasar a las reservas', onclick: () => {
@@ -205,6 +210,8 @@ export function vistaEditor(raiz) {
       el('div', { class: 'movimientos' }, el('span', {}, 'Movimientos'),
         el('datalist', { id: 'dl-movs' }, [...aprendibles].map(id => mapas.movimientos.get(id)).filter(Boolean)
           .sort((a, b) => a.nombre.localeCompare(b.nombre)).map(mv => el('option', { value: mv.nombre }))),
+        m.anil_id && el('p', { class: 'nota' }, sinLista ? 'Forma propia de Pokémon Añil: no hay lista de movimientos, valen todos.'
+          : 'Forma propia de Pokémon Añil: se comprueban con los movimientos de su especie en los juegos oficiales.'),
         el('div', { class: 'lista-movs' }, inputs), avisos),
     );
   }
@@ -245,7 +252,7 @@ export function vistaEditor(raiz) {
   const nombreInput = el('input', { value: eq.nombre, maxlength: 40, placeholder: 'Equipo N (automático)', oninput: e => { eq.nombre = e.target.value; cambio(); } });
   const genSelect = selectorGen(eq.generacion, GENERACIONES.map(([g]) => [g, `Gen ${g}`]), g => {
     eq.generacion = g;
-    const fuera = eq.miembros.map(m => pokemon(m.pokemon_id)).filter(p => !existeEn(p, g)).map(p => p.nombre);
+    const fuera = eq.miembros.map(m => pokemon(m.pokemon_id)).filter(p => p && !existeEn(p, g)).map(p => p.nombre);
     if (fuera.length) aviso(`No existen en Gen ${g}: ${fuera.join(', ')}`, 'error');
     cambio(); pintarPanel(); pintarCobertura();
   });
@@ -264,5 +271,17 @@ export function vistaEditor(raiz) {
   if (seleccion > 1 && !miembro(seleccion) && !eq.miembros.length) seleccion = 1;
   pintarSlots(); pintarPanel(); pintarCobertura();
   // Se piden ya las fichas de todo el equipo: al cambiar de hueco el cuadro sale al momento
-  for (const m of eq.miembros) ficha(m.pokemon_id).catch(() => {});
+  for (const m of eq.miembros) if (m.pokemon_id) ficha(m.pokemon_id).catch(() => {});
+}
+
+/**
+ * Ficha para el editor: la de la BD. En las formas propias de Añil, las habilidades son las del juego
+ * (buscadas por nombre entre las oficiales) y los movimientos los de su especie oficial; si no tiene, sin lista.
+ */
+async function fichaMiembro(m, d) {
+  const f = m.pokemon_id ? await ficha(m.pokemon_id) : { habilidades: [], movimientos: null };
+  if (!d.anil) return f;
+  const porNombre = new Map(catalogo.habilidades.map(h => [normalizar(h.nombre), h]));
+  const habilidades = habilidadesAnil(d.anil).map(h => ({ ...porNombre.get(normalizar(h.nombre)), oculta: h.oculta })).filter(h => h.id);
+  return { ...f, habilidades: habilidades.length ? habilidades : f.habilidades };
 }

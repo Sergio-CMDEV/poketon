@@ -7,6 +7,7 @@ import { WEB } from './api.js';
 export function el(tag, attrs = {}, ...hijos) {
   const e = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs || {})) {
+    if (k === 'spellcheck') { e.spellcheck = !!v; continue; }   // false también cuenta (se saltaría abajo)
     if (v === undefined || v === null || v === false) continue;
     if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
     else if (k === 'class') e.className = v;
@@ -60,14 +61,26 @@ export function iconoObjeto(o, tam = 24) {
   }
   const pokeapi = id => `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/${id}.png`;
   const local = claveJuego(o.nombre_en);
+  const propio = ICONOS_PROPIOS[o.identificador];
   const urls = [
-    o.imagen && `https://raw.githubusercontent.com/msikma/pokesprite/master/items/${o.imagen}.png`,
-    o.identificador && pokeapi(o.identificador),
-    o.identificador?.includes('--') && pokeapi(o.identificador.split('--')[0]),   // "ss-ticket--letsgo" → "ss-ticket"
+    !propio && o.imagen && `https://raw.githubusercontent.com/msikma/pokesprite/master/items/${o.imagen}.png`,
+    !propio && o.identificador && pokeapi(o.identificador),
+    !propio && o.identificador?.includes('--') && pokeapi(o.identificador.split('--')[0]),   // "ss-ticket--letsgo" → "ss-ticket"
     iconosLocales.has(local) && `${WEB}anil/objetos/${local}.png`,
+    propio && `${WEB}img/iconos/${propio}.svg`,
   ].filter(Boolean);
   return urls.length ? iconoImagen(urls, o.nombre, tam) : iconoVacio(tam);
 }
+
+// Iconos dibujados para Poketon (public/img/iconos/) de los objetos que no tienen icono en ninguna web.
+// Si está Pokémon Añil en el PC, antes se usa el del juego.
+const ICONOS_PROPIOS = {
+  'health-mochi': 'mochi-ps', 'muscle-mochi': 'mochi-ataque', 'resist-mochi': 'mochi-defensa', 'genius-mochi': 'mochi-at-esp',
+  'clever-mochi': 'mochi-def-esp', 'swift-mochi': 'mochi-velocidad', 'fresh-start-mochi': 'mochi-reinicio',
+  'linking-cord': 'cordon-union', 'black-augurite': 'mineral-negro', 'peat-block': 'bloque-turba', 'teal-mask': 'mascara-turquesa',
+  'blank-plate': 'tabla-neutra', 'legend-plate': 'tabla-legendaria', 'scroll-of-darkness': 'manuscrito-sombras',
+  'scroll-of-waters': 'manuscrito-aguas', 'tera-orb': 'orbe-teracristal', 'glimmering-charm': 'amuleto-cristalino',
+};
 
 // Iconos de objetos copiados del juego instalado (los genera scripts/anil.mjs en public/anil/objetos/).
 // Sirven para los pocos objetos de Escarlata/Púrpura que no tienen icono en ninguna web (Mochis, Cordón Unión…).
@@ -207,4 +220,65 @@ export function iconoGoogle() {
 export function poner(nodo, ...hijos) {
   // flat(Infinity): las listas pueden venir anidadas (p. ej. [cabecera, [habilidad, habilidad]])
   nodo.replaceChildren(...hijos.flat(Infinity).filter(h => h !== null && h !== undefined && h !== false));
+}
+
+/* ---------- Avatares de usuario (online) ---------- */
+// Foto subida → Pokémon elegido → inicial sobre un color (el mismo siempre para cada usuario).
+const COLORES_AVATAR = ['#3f9b5a', '#8a5bd1', '#e8762e', '#5c58a8', '#b08e3c', '#3d6fc2', '#d9759c', '#4aa9ad'];
+
+export function avatarUsuario(u, tam = 40, { enLinea = null, propio = false } = {}) {
+  const color = propio ? null : COLORES_AVATAR[(u?.id ?? 0) % COLORES_AVATAR.length];
+  const caja = el('span', { class: `av${propio ? ' propio' : ''}`, 'aria-hidden': 'true',
+    style: { width: `${tam}px`, height: `${tam}px`, fontSize: `${Math.round(tam * 0.4)}px`, ...(color ? { '--av': color } : {}) } });
+  const inicial = () => { caja.classList.remove('foto', 'poke'); poner(caja, (u?.nombre || '?')[0].toUpperCase()); };
+  if (u?.foto) {
+    caja.classList.add('foto');
+    caja.append(el('img', { src: `${WEB}fotos/${u.foto}`, alt: '', width: tam, height: tam, onerror: inicial }));
+  } else if (u?.avatar) {
+    caja.classList.add('poke');
+    caja.append(sprite(u.avatar, { tam: Math.round(tam * 0.92) }));
+  } else inicial();
+  if (enLinea !== null) return el('span', { class: 'av-caja' }, caja, el('span', { class: `punto${enLinea ? ' on' : ''}` }));
+  return caja;
+}
+
+/* ---------- Ventanas: diálogo centrado u hoja que sube desde abajo ---------- */
+// Devuelve { cerrar, caja }. Se cierra con Escape, con la ✕ o pulsando fuera.
+
+export function ventana(contenido, { hoja = false, titulo = '', alCerrar = null, clase = '' } = {}) {
+  const anterior = document.activeElement;
+  const caja = el('section', { class: `ventana ${hoja ? 'hoja' : ''} ${clase}`, role: 'dialog', 'aria-modal': 'true', 'aria-label': titulo || 'Ventana', tabindex: '-1' });
+  const fondo = el('div', { class: 'ventana-fondo', onpointerdown: e => { if (e.target === fondo) cerrar(); } }, caja);
+  const tecla = e => { if (e.key === 'Escape') cerrar(); };
+  let cerrada = false;
+  function cerrar() {
+    if (cerrada) return;
+    cerrada = true;
+    document.removeEventListener('keydown', tecla);
+    fondo.remove();
+    document.body.classList.remove('con-ventana');
+    anterior?.focus?.();
+    alCerrar?.();
+  }
+  poner(caja, hoja && el('span', { class: 'asa', 'aria-hidden': 'true' }),
+    titulo && el('div', { class: 'ventana-cab' }, el('b', {}, titulo), el('button', { class: 'cerrar', type: 'button', 'aria-label': 'Cerrar', onclick: cerrar }, '✕')),
+    typeof contenido === 'function' ? contenido(cerrar) : contenido);
+  document.addEventListener('keydown', tecla);
+  document.body.append(fondo);
+  document.body.classList.add('con-ventana');
+  caja.focus();
+  return { cerrar, caja };
+}
+
+/** Pregunta de sí o no con nuestro estilo. confirmar('¿Borrar el chat?', 'Solo para ti.', 'Borrar') → true / false */
+export function confirmar(titulo, texto, botonSi = 'Aceptar', { peligro = true } = {}) {
+  return new Promise(ok => {
+    let respuesta = false;
+    ventana(cerrar => [
+      texto && el('p', { class: 'sub' }, texto),
+      el('div', { class: 'dos-botones' },
+        el('button', { class: 'btn sec', type: 'button', onclick: cerrar }, 'Cancelar'),
+        el('button', { class: `btn ${peligro ? 'peligro-lleno' : ''}`, type: 'button', onclick: () => { respuesta = true; cerrar(); } }, botonSi)),
+    ], { titulo, clase: 'pregunta', alCerrar: () => ok(respuesta) });
+  });
 }

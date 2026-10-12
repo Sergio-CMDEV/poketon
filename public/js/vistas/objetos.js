@@ -8,6 +8,7 @@ import { catalogo, mapas, normalizar, pokemon, nombre } from '../datos.js';
 import { el, sprite, spriteTira, poner, campo, iconoObjeto, iconoImagen, botonMenu, aviso, selectorGen } from '../ui.js';
 import { anil, enAnil, objetoAnil, usosObjetoAnil, urlSprite, msSprite, nombreAnil } from '../anil.js';
 import { borrador, misEquipos, equiparEnBorrador, equiparEnEquipo } from '../equipos.js';
+import { datosMiembro } from '../miembro.js';
 
 const CATEGORIAS = ['Equipables', 'Bayas', 'Evolución', 'Megapiedras', 'Cristales Z', 'Medicinas', 'Poké Balls', 'MT', 'Combate', 'Otros'];
 const MAX_LISTA = 100;
@@ -172,14 +173,14 @@ function botonEquipar(o) {
 
 async function opcionesEquipar(o) {
   const opcion = (m, accion) => {
-    const p = pokemon(m.pokemon_id);
+    const d = datosMiembro(m);
     const lleva = m.objeto_id === o.id;
     return {
-      texto: p ? nombre(p) : '?',
+      texto: d.nombre,
       detalle: lleva ? 'Ya lo lleva' : (mapas.objetos.get(m.objeto_id)?.nombre ?? 'Sin objeto') + (m.posicion > 6 ? ' · reserva' : ''),
-      portada: [sprite(m.pokemon_id, { tam: 40, alt: '' })],
+      portada: [d.sprite(40)],
       desactivada: lleva,
-      accion: async () => { await accion(); aviso(`${o.nombre} equipado a ${p ? nombre(p) : 'tu Pokémon'}`); },
+      accion: async () => { await accion(); aviso(`${o.nombre} equipado a ${d.nombre}`); },
     };
   };
   const ordenados = eq => eq.miembros.slice().sort((a, b) => a.posicion - b.posicion);

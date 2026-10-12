@@ -7,6 +7,10 @@ declare(strict_types=1);
 
 $CONFIG = require __DIR__ . '/../config.php';
 
+// Los avisos de PHP nunca se pintan en la respuesta (romperían el JSON y enseñarían rutas del servidor): van al log
+ini_set('display_errors', !empty($CONFIG['debug']) ? '1' : '0');
+ini_set('log_errors', '1');
+
 // Antes de nada: que PHP tenga lo que hace falta y que config.php esté completo.
 // Si falta algo se dice claramente, en vez de un "Error 500" sin más.
 foreach (['pdo_mysql', 'mbstring'] as $ext) {
@@ -14,6 +18,10 @@ foreach (['pdo_mysql', 'mbstring'] as $ext) {
 }
 if (strlen((string) ($CONFIG['jwt_secret'] ?? '')) < 32) {
     fallo_config("Falta 'jwt_secret' en config.php (mínimo 32 caracteres). Mira config.example.php");
+}
+// La clave de ejemplo está en GitHub: con ella cualquiera podría firmar una sesión y entrar en cualquier cuenta
+if (str_starts_with((string) $CONFIG['jwt_secret'], 'cambia-esto')) {
+    fallo_config("Cambia 'jwt_secret' en config.php: la del ejemplo es pública. Genera una con: php -r \"echo bin2hex(random_bytes(32));\"");
 }
 
 function fallo_config(string $mensaje): never
@@ -29,6 +37,10 @@ function fallo_config(string $mensaje): never
 set_exception_handler(function (Throwable $e) {
     if ($e instanceof ErrorApi) responder(['error' => $e->getMessage()], $e->getCode());
     error_log((string) $e);
+    // Falta una tabla o una columna: casi siempre es una migración sin ejecutar (db/migraciones/)
+    if ($e instanceof PDOException && in_array($e->getCode(), ['42S02', '42S22'], true)) {
+        responder(['error' => 'La base de datos no está al día: falta ejecutar una migración de db/migraciones/ (mira Despliegue)'], 500);
+    }
     global $CONFIG;
     // En desarrollo ('debug' => true en config.php) se muestra el error real; en producción, nunca
     responder(['error' => !empty($CONFIG['debug']) ? $e->getMessage() : 'Error interno del servidor'], 500);
@@ -115,8 +127,10 @@ function b64url_dec(string $s): string { return base64_decode(strtr($s, '-_', '+
 function crear_token(int $usuarioId): string
 {
     global $CONFIG;
+    // v = versión de sesión del usuario: si sube (cambio de contraseña…), este token deja de valer
+    $version = (int) (consulta('SELECT version_sesion FROM usuario WHERE id = ?', [$usuarioId])[0]['version_sesion'] ?? 0);
     $cabecera = b64url(json_encode(['alg' => 'HS256', 'typ' => 'JWT']));
-    $datos = b64url(json_encode(['sub' => $usuarioId, 'exp' => time() + 7 * 24 * 3600]));   // 7 días
+    $datos = b64url(json_encode(['sub' => $usuarioId, 'v' => $version, 'exp' => time() + 7 * 24 * 3600]));   // 7 días
     $firma = b64url(hash_hmac('sha256', "$cabecera.$datos", $CONFIG['jwt_secret'], true));
     return "$cabecera.$datos.$firma";
 }
@@ -135,7 +149,17 @@ function usuario_actual(): int
     if (!hash_equals($esperada, $f) || !is_array($datos) || ($datos['exp'] ?? 0) < time()) {
         error_api('La sesión ha caducado. Vuelve a iniciar sesión', 401);
     }
+    // La cuenta tiene que existir y la sesión ser de su versión actual (si no, se cerró al cambiar la contraseña)
+    $version = consulta('SELECT version_sesion FROM usuario WHERE id = ?', [(int) $datos['sub']])[0]['version_sesion'] ?? null;
+    if ($version === null) error_api('La cuenta ya no existe', 401);
+    if ((int) $version !== (int) ($datos['v'] ?? 0)) error_api('La sesión se ha cerrado. Vuelve a iniciar sesión', 401);
     return (int) $datos['sub'];
+}
+
+/** IP de quien hace la petición (detrás del proxy, nginx la pone con real_ip). */
+function ip(): string
+{
+    return substr($_SERVER['REMOTE_ADDR'] ?? '', 0, 45);
 }
 
 /* ---------------------------------------------------------------------
@@ -171,10 +195,14 @@ function enviar_email(string $para, string $asunto, string $texto): void
     $orden("MAIL FROM:<{$s['from']}>", '250');
     $orden("RCPT TO:<$para>", '250');
     $orden('DATA', '354');
+    $dominio = substr(strrchr($s['from'], '@') ?: '@poketon.online', 1);
+    $cuerpo = preg_replace("/\r?\n/", "\r\n", $texto);                 // los servidores SMTP piden CRLF
     $msg = "From: Poketon <{$s['from']}>\r\nTo: <$para>\r\n"
          . 'Subject: =?UTF-8?B?' . base64_encode($asunto) . "?=\r\n"
+         . 'Date: ' . date('r') . "\r\n"
+         . 'Message-ID: <' . bin2hex(random_bytes(12)) . "@$dominio>\r\n"
          . "MIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n"
-         . str_replace("\n.", "\n..", $texto) . "\r\n.";
+         . str_replace("\r\n.", "\r\n..", $cuerpo) . "\r\n.";
     $orden($msg, '250');
     fwrite($con, "QUIT\r\n");
     fclose($con);

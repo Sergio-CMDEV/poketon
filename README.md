@@ -7,6 +7,7 @@ Web y app de escritorio para consultar Pokémon y montar equipos:
 - Constructor de equipos (6 titulares + 2 reservas) con tabla de cobertura defensiva y avisos de movimientos ilegales.
 - Importar y exportar equipos en formato de Pokémon Showdown.
 - Cuentas de usuario: registro, login (también con Google), recuperar contraseña por email, hasta 8 equipos.
+- Online: perfil con foto (recorte como en Discord) o un Pokémon, amigos con código o enlace, chat 1 a 1 y equipos compartidos.
 
 ## Tecnologías
 
@@ -27,7 +28,7 @@ db/
   schema.sql          crea las tablas
   import.php          llena la BD con los datos de PokeAPI
   migraciones/        cambios para una BD ya creada
-src/lib.php           funciones comunes de la API (fuera de public/)
+src/                  fuera de public/: lib.php (común de la API), online.php (amigos y chat), equipos.php
 public/               lo único que sirve el servidor web
   index.html
   css/styles.css
@@ -38,6 +39,9 @@ public/               lo único que sirve el servidor web
     cobertura.js      tabla de cobertura de un equipo
     showdown.js       importar/exportar texto de Showdown
     equipos.js        equipo en edición y equipos guardados
+    online.js         número de avisos de Amigos (sondeo), formatos y acciones del online
+    recorte.js        recorte de la foto de perfil
+    compartidos.js    equipos compartidos en el chat
     ui.js             utilidades para crear la interfaz
     vistas/           una pantalla por archivo
   api/
@@ -45,6 +49,10 @@ public/               lo único que sirve el servidor web
     pokemon.php       ficha: stats, habilidades, evolución, movimientos
     auth.php          registro, login, Google, recuperar contraseña, cuenta
     equipos.php       CRUD de equipos del usuario
+    perfil.php        @usuario, foto, código de amigo y privacidad
+    amigos.php        amigos, solicitudes y bloqueos
+    mensajes.php      chats (sondeo cada 3 s) y equipos compartidos
+  fotos/              fotos de perfil subidas (no se sube a GitHub)
 docker/               Nginx y PHP para el despliegue
 src-tauri/            app de escritorio
 ```
@@ -68,7 +76,10 @@ En la máquina de webs (la BD está en su propia máquina; `config.php` apunta a
 ```bash
 docker compose up -d --build
 ```
-La web queda en el puerto 8080; ponla detrás de tu proxy con HTTPS.
+La web queda en el puerto 8080; ponla detrás de tu proxy con HTTPS. Antes del primer arranque, crea la carpeta de las fotos de perfil con permiso para PHP:
+```bash
+mkdir -p public/fotos && chown 82:82 public/fotos
+```
 
 ## App de escritorio
 
@@ -79,6 +90,13 @@ npm run build
 ```
 El .exe queda en `src-tauri/target/release/`. Llama a la API publicada (constante `API_PUBLICADA` en `public/js/api.js`).
 
+## Licencia
+
+El código es de licencia **MIT** (ver [LICENSE](LICENSE)). La licencia cubre solo el código de Poketon, no los datos ni las imágenes de Pokémon.
+
 ## Créditos
 
-Proyecto fan no oficial. Pokémon y sus nombres e imágenes © Nintendo / Creatures / Game Freak. Datos y sprites: PokeAPI.
+Proyecto fan no oficial, sin ánimo de lucro. Pokémon y sus nombres e imágenes © Nintendo / Creatures / Game Freak.
+- Datos y sprites: [PokeAPI](https://pokeapi.co).
+- Sets competitivos: [Smogon](https://www.smogon.com).
+- Iconos de objetos: [Pokémon Showdown](https://pokemonshowdown.com) y [PokéSprite](https://github.com/msikma/pokesprite).

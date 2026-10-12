@@ -5,6 +5,7 @@ import { pokemon, nombre } from '../datos.js';
 import { el, sprite, aviso, poner } from '../ui.js';
 import { misEquipos, borrador, guardarBorrador, borrarEquipo, equipoVacio } from '../equipos.js';
 import { tablaCobertura } from '../cobertura.js';
+import { datosMiembro } from '../miembro.js';
 
 const MAX = 8;
 
@@ -47,8 +48,8 @@ function tarjetaEquipo(eq, raiz, conCuenta) {
   const reservas = eq.miembros.length - titulares.length;
   const huecos = [1, 2, 3, 4, 5, 6].map(pos => {
     const m = eq.miembros.find(x => x.posicion === pos);
-    const p = m && pokemon(m.pokemon_id);
-    return el('span', { class: 'hueco', title: p ? nombre(p) : 'Vacío' }, p && sprite(p.id, { tam: 56, shiny: m.shiny, alt: nombre(p) }));
+    const d = m && datosMiembro(m, eq.generacion);
+    return el('span', { class: 'hueco', title: d ? d.nombre : 'Vacío' }, d && d.sprite(56, d.nombre));
   });
 
   const abrir = destino => () => { guardarBorrador(eq); location.hash = destino; };

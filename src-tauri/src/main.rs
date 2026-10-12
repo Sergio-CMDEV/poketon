@@ -109,6 +109,7 @@ const PAGINA_ERROR: &str = "<!doctype html><meta charset=utf-8><title>Poketon</t
 
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())   // versiones nuevas (ver "plugins.updater" en tauri.conf.json)
         .invoke_handler(tauri::generate_handler![entrar_con_navegador])
         .run(tauri::generate_context!())
         .expect("no se pudo iniciar Poketon");

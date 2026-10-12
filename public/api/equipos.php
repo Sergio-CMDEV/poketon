@@ -6,10 +6,11 @@
  *   PUT    /api/equipos.php?id=3     → reemplaza un equipo  (mismo formato)
  *   DELETE /api/equipos.php?id=3     → borra un equipo
  *
- * Miembro: {posicion 1-8 (7-8 reservas), pokemon_id, apodo?, objeto_id?, habilidad_id?, naturaleza_id?,
+ * Miembro: {posicion 1-8 (7-8 reservas), pokemon_id, anil_id? (forma propia de Pokémon Añil), apodo?, objeto_id?, habilidad_id?, naturaleza_id?,
  *           teratipo_id?, nivel?, shiny?, evs: [6], ivs: [6], movimientos: [ids, máx. 4]}
  */
 require __DIR__ . '/../../src/lib.php';
+require __DIR__ . '/../../src/equipos.php';
 
 const MAX_EQUIPOS = 8;
 $usuario = usuario_actual();
@@ -30,7 +31,7 @@ function miembros_validos(mixed $miembros): array
     if (!is_array($miembros) || count($miembros) < 1) error_api('Añade al menos un Pokémon');
     if (count($miembros) > 8) error_api('Máximo 6 titulares y 2 reservas');
     $int = fn($v, $min, $max, $campo) => (is_int($v) && $v >= $min && $v <= $max) ? $v : error_api("Valor no válido en $campo");
-    $opc = fn($v) => $v === null || $v === '' ? null : (is_int($v) ? $v : error_api('Id no válido'));
+    $opc = fn($v) => $v === null || $v === '' ? null : (is_int($v) && $v >= 1 && $v <= 65535 ? $v : error_api('Id no válido'));
     $out = [];
     $posiciones = [];
     foreach ($miembros as $m) {
@@ -45,9 +46,14 @@ function miembros_validos(mixed $miembros): array
         if (array_sum($evs) > 510) error_api('Los EVs no pueden sumar más de 510');
         $movs = $m['movimientos'] ?? [];
         if (!is_array($movs) || count($movs) > 4) error_api('Máximo 4 movimientos');
+        // Formas propias de Pokémon Añil: anil_id ("RAICHU_2") y pokemon_id es su especie oficial, o null si no tiene
+        $anil = isset($m['anil_id']) && $m['anil_id'] !== '' ? (string) $m['anil_id'] : null;
+        if ($anil !== null && !preg_match('/^[A-Z0-9_]{1,40}$/', $anil)) error_api('Pokémon de Añil no válido');
+        if ($anil === null && ($m['pokemon_id'] ?? null) === null) error_api('Falta el Pokémon');
         $out[] = [
             'posicion' => $pos,
-            'pokemon_id' => $int($m['pokemon_id'] ?? null, 1, 65535, 'pokemon_id'),
+            'pokemon_id' => ($m['pokemon_id'] ?? null) === null ? null : $int($m['pokemon_id'], 1, 65535, 'pokemon_id'),
+            'anil_id' => $anil,
             'apodo' => isset($m['apodo']) && $m['apodo'] !== '' ? mb_substr((string) $m['apodo'], 0, 20) : null,
             'objeto_id' => $opc($m['objeto_id'] ?? null),
             'habilidad_id' => $opc($m['habilidad_id'] ?? null),
@@ -65,60 +71,31 @@ function miembros_validos(mixed $miembros): array
 /** Nombre libre "Equipo N" con el N más bajo que no use ya. */
 function nombre_libre(int $usuario): string
 {
-    $usados = array_column(consulta('SELECT nombre FROM equipo WHERE usuario_id = ?', [$usuario]), 'nombre');
-    for ($n = 1; in_array("Equipo $n", $usados, true); $n++);
+    // En minúsculas: la BD no distingue "equipo 1" de "Equipo 1"
+    $usados = array_map('mb_strtolower', array_column(consulta('SELECT nombre FROM equipo WHERE usuario_id = ?', [$usuario]), 'nombre'));
+    for ($n = 1; in_array("equipo $n", $usados, true); $n++);
     return "Equipo $n";
 }
 
 /** Inserta los miembros (y sus movimientos) de un equipo. */
 function guardar_miembros(int $equipoId, array $miembros): void
 {
-    $ins = db()->prepare('INSERT INTO miembro_equipo (equipo_id, posicion, pokemon_id, apodo, objeto_id, habilidad_id, naturaleza_id,
+    $ins = db()->prepare('INSERT INTO miembro_equipo (equipo_id, posicion, pokemon_id, anil_id, apodo, objeto_id, habilidad_id, naturaleza_id,
         teratipo_id, nivel, shiny, ev_ps, ev_ataque, ev_defensa, ev_at_esp, ev_def_esp, ev_velocidad,
         iv_ps, iv_ataque, iv_defensa, iv_at_esp, iv_def_esp, iv_velocidad)
-        VALUES (?,?,?,?,?,?,?,?,?,?, ?,?,?,?,?,?, ?,?,?,?,?,?)');
+        VALUES (?,?,?,?,?,?,?,?,?,?,?, ?,?,?,?,?,?, ?,?,?,?,?,?)');
     $mov = db()->prepare('INSERT INTO miembro_movimiento (miembro_id, slot, movimiento_id) VALUES (?, ?, ?)');
     foreach ($miembros as $m) {
-        $ins->execute([$equipoId, $m['posicion'], $m['pokemon_id'], $m['apodo'], $m['objeto_id'], $m['habilidad_id'],
+        $ins->execute([$equipoId, $m['posicion'], $m['pokemon_id'], $m['anil_id'], $m['apodo'], $m['objeto_id'], $m['habilidad_id'],
                        $m['naturaleza_id'], $m['teratipo_id'], $m['nivel'], $m['shiny'], ...$m['evs'], ...$m['ivs']]);
         $miembroId = (int) db()->lastInsertId();
         foreach ($m['movimientos'] as $i => $movId) $mov->execute([$miembroId, $i + 1, $movId]);
     }
 }
 
-/** Todos los equipos del usuario con sus miembros. */
-function listar(int $usuario): array
-{
-    $equipos = consulta('SELECT id, nombre, generacion, actualizado_en FROM equipo WHERE usuario_id = ? ORDER BY actualizado_en DESC', [$usuario]);
-    if (!$equipos) return [];
-    $miembros = consulta(
-        'SELECT m.*, (SELECT GROUP_CONCAT(mm.movimiento_id ORDER BY mm.slot) FROM miembro_movimiento mm WHERE mm.miembro_id = m.id) AS movs
-           FROM miembro_equipo m JOIN equipo e ON e.id = m.equipo_id
-          WHERE e.usuario_id = ? ORDER BY m.posicion', [$usuario]);
-    $porEquipo = [];
-    foreach ($miembros as $m) {
-        $stats = ['ps', 'ataque', 'defensa', 'at_esp', 'def_esp', 'velocidad'];
-        $porEquipo[$m['equipo_id']][] = [
-            'posicion' => (int) $m['posicion'], 'pokemon_id' => (int) $m['pokemon_id'], 'apodo' => $m['apodo'],
-            'objeto_id' => $m['objeto_id'] === null ? null : (int) $m['objeto_id'],
-            'habilidad_id' => $m['habilidad_id'] === null ? null : (int) $m['habilidad_id'],
-            'naturaleza_id' => $m['naturaleza_id'] === null ? null : (int) $m['naturaleza_id'],
-            'teratipo_id' => $m['teratipo_id'] === null ? null : (int) $m['teratipo_id'],
-            'nivel' => (int) $m['nivel'], 'shiny' => (bool) $m['shiny'],
-            'evs' => array_map(fn($s) => (int) $m["ev_$s"], $stats),
-            'ivs' => array_map(fn($s) => (int) $m["iv_$s"], $stats),
-            'movimientos' => $m['movs'] ? array_map('intval', explode(',', $m['movs'])) : [],
-        ];
-    }
-    return array_map(fn($e) => [
-        'id' => (int) $e['id'], 'nombre' => $e['nombre'], 'generacion' => (int) $e['generacion'],
-        'actualizado_en' => $e['actualizado_en'], 'miembros' => $porEquipo[$e['id']] ?? [],
-    ], $equipos);
-}
-
 switch (metodo()) {
     case 'GET':
-        responder(listar($usuario));
+        responder(listar_equipos($usuario));
 
     case 'POST':
     case 'PUT':
@@ -137,7 +114,8 @@ switch (metodo()) {
         db()->beginTransaction();
         try {
             if (metodo() === 'PUT') {
-                consulta('UPDATE equipo SET nombre = ?, generacion = ? WHERE id = ?', [$nombre, $gen, $id]);
+                // actualizado_en a mano: si solo cambian los miembros, la fila de equipo no cambia y no se actualizaría sola
+                consulta('UPDATE equipo SET nombre = ?, generacion = ?, actualizado_en = NOW() WHERE id = ?', [$nombre, $gen, $id]);
                 consulta('DELETE FROM miembro_equipo WHERE equipo_id = ?', [$id]);   // sus movimientos caen en cascada
             } else {
                 consulta('INSERT INTO equipo (usuario_id, nombre, generacion) VALUES (?, ?, ?)', [$usuario, $nombre, $gen]);
@@ -147,10 +125,11 @@ switch (metodo()) {
             db()->commit();
         } catch (PDOException $e) {
             db()->rollBack();
+            if ($e->getCode() === '23000' && str_contains($e->getMessage(), 'Duplicate')) error_api('Ya tienes un equipo con ese nombre', 409);
             if ($e->getCode() === '23000') error_api('Algún Pokémon, objeto o movimiento no existe');
             throw $e;
         }
-        $equipo = array_values(array_filter(listar($usuario), fn($e) => $e['id'] === $id))[0];
+        $equipo = array_values(array_filter(listar_equipos($usuario), fn($e) => $e['id'] === $id))[0];
         responder($equipo, metodo() === 'POST' ? 201 : 200);
 
     case 'DELETE':

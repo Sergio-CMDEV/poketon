@@ -14,6 +14,7 @@
 
 import { catalogo, mapas, normalizar, pokemon, ficha } from './datos.js';
 import { EQUIVALENCIAS } from './equivalencias.js';
+import { pokemonAnil } from './anil.js';
 
 const STAT_TXT = ['HP', 'Atk', 'Def', 'SpA', 'SpD', 'Spe'];
 // Nombres de cada stat en inglés y en español (ya normalizados: sin tildes, espacios ni puntos)
@@ -75,9 +76,45 @@ function parecido(texto, lista, minimo = 0.5) {
   return nota >= minimo ? mejor : null;
 }
 
+/* ---------- Nombres de las formas en Showdown ----------
+   PokeAPI y Showdown no llaman igual a algunas formas ("indeedee-female" → "Indeedee-F",
+   "ogerpon-wellspring-mask" → "Ogerpon-Wellspring", "tauros-paldea-combat-breed" → "Tauros-Paldea-Combat").
+   Se usa el nombre de la especie en inglés ("Mr. Mime") + la forma, con unas reglas y unas pocas excepciones. */
+
+const FORMAS_SHOWDOWN = {
+  'nidoran-f': 'Nidoran-F', 'nidoran-m': 'Nidoran-M',
+  'maushold-family-of-four': 'Maushold-Four', 'maushold-family-of-three': 'Maushold',
+  'necrozma-dusk': 'Necrozma-Dusk-Mane', 'necrozma-dawn': 'Necrozma-Dawn-Wings',
+  'zygarde-10': 'Zygarde-10%', 'zygarde-10-power-construct': 'Zygarde-10%', 'zygarde-50-power-construct': 'Zygarde',
+  'greninja-battle-bond': 'Greninja-Bond', 'pikachu-phd': 'Pikachu-PhD', 'minior-red-meteor': 'Minior',
+  'darmanitan-galar-standard': 'Darmanitan-Galar', 'urshifu-single-strike-gmax': 'Urshifu-Gmax', 'toxtricity-amped-gmax': 'Toxtricity-Gmax',
+};
+
+const slug = n => n.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/['’.:]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+const mayus = parte => parte.split('-').map(w => w && w[0].toUpperCase() + w.slice(1)).join('-');
+
+/** Nombre de un Pokémon (o forma) tal como lo escribe Showdown. */
+export function nombreShowdown(p) {
+  if (FORMAS_SHOWDOWN[p.identificador]) return FORMAS_SHOWDOWN[p.identificador];
+  if (p.predeterminado) return p.nombre_en;
+  const base = slug(p.nombre_en);
+  if (!p.identificador.startsWith(`${base}-`)) return mayus(p.identificador);
+  const forma = p.identificador.slice(base.length + 1)
+    .replace(/-mask(-tera)?$/, (_, t) => (t ? '-tera' : ''))   // Ogerpon
+    .replace(/-(breed|plumage|cap)$/, '')                        // Tauros de Paldea, Squawkabilly, gorras de Pikachu
+    .replace(/^female$/, 'f');                                   // Indeedee-F, Meowstic-F, Basculegion-F, Oinkologne-F
+  return `${p.nombre_en}-${mayus(forma)}`;
+}
+
+let porNombreShowdown = null;
 function buscarPokemon(texto) {
   const k = normalizar(texto);
-  return catalogo.pokemon.find(p => normalizar(p.identificador) === k)
+  if (!porNombreShowdown) {
+    porNombreShowdown = new Map();
+    for (const p of catalogo.pokemon) { const n = normalizar(nombreShowdown(p)); if (!porNombreShowdown.has(n)) porNombreShowdown.set(n, p); }
+  }
+  return porNombreShowdown.get(k)
+      ?? catalogo.pokemon.find(p => normalizar(p.identificador) === k)
       ?? catalogo.pokemon.find(p => p.predeterminado && (normalizar(p.nombre_en) === k || normalizar(p.nombre) === k))
       ?? catalogo.pokemon.find(p => p.clave === k)
       ?? null;
@@ -180,7 +217,8 @@ export async function importar(texto, { usarSugerencias = false } = {}) {
 export function exportar(equipo) {
   return equipo.miembros.slice().sort((a, b) => a.posicion - b.posicion).map(m => {
     const p = pokemon(m.pokemon_id);
-    const especie = p.predeterminado ? p.nombre_en : p.identificador.split('-').map(s => s[0].toUpperCase() + s.slice(1)).join('-');
+    // Formas propias de Pokémon Añil: Showdown no las conoce; se exporta su especie oficial o, si no tiene, su nombre
+    const especie = p ? nombreShowdown(p) : (pokemonAnil(m.anil_id)?.nombre ?? m.anil_id ?? 'Unknown');
     const lineas = [];
     const objeto = mapas.objetos.get(m.objeto_id);
     lineas.push((m.apodo ? `${m.apodo} (${especie})` : especie) + (objeto ? ` @ ${objeto.nombre_en}` : ''));
@@ -201,9 +239,11 @@ export function exportar(equipo) {
   }).join('\n\n');
 }
 
-export function nuevoMiembro(pokemonId, posicion) {
+/** Miembro nuevo. pokemon: id de la BD o { pokemon_id, anil_id } (formas propias de Pokémon Añil). */
+export function nuevoMiembro(pokemon, posicion) {
+  const { pokemon_id, anil_id = null } = typeof pokemon === 'object' && pokemon ? pokemon : { pokemon_id: pokemon };
   return {
-    posicion, pokemon_id: pokemonId, apodo: null, objeto_id: null, habilidad_id: null, naturaleza_id: null,
+    posicion, pokemon_id, anil_id, apodo: null, objeto_id: null, habilidad_id: null, naturaleza_id: null,
     teratipo_id: null, nivel: 100, shiny: false, evs: [0, 0, 0, 0, 0, 0], ivs: [31, 31, 31, 31, 31, 31], movimientos: [],
   };
 }

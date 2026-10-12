@@ -1,0 +1,4 @@
+# Los scripts y la configuración del servidor se usan en Linux: siempre con saltos de línea LF
+*.sh text eol=lf
+docker/* text eol=lf
+docker-compose.yml text eol=lf

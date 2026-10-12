@@ -11,6 +11,7 @@ import {
 import { el, chip, sprite, spriteTira, aviso, poner, campo, selectorGen, iconoObjeto, iconoImagen, botonMenu } from '../ui.js';
 import { sesion } from '../api.js';
 import { genActual, añadirAlBorrador, borrador, misEquipos, añadirAEquipo, crearEquipoCon } from '../equipos.js';
+import { datosMiembro, idsDeAnil } from '../miembro.js';
 
 const estado = { tab: 'tipos', shiny: false };
 
@@ -124,7 +125,7 @@ function datosAnil(p) {
     tabla: tablaAnil(),
     sprite: (shiny, tam) => spriteTira(urlSprite(p, shiny), { tam, alt: nombreAnil(p), ms: msSprite(p, shiny) }),
     formas: anil.pokemon.filter(x => x.base === p.base).map(x => ({ href: `#/anil/${x.id}`, txt: x.forma || 'Normal', on: x.id === p.id })),
-    idEquipo: p.oficial,   // las formas propias de Añil no existen en la BD y no se pueden añadir a un equipo
+    idEquipo: idsDeAnil(p, anil),   // las formas propias de Añil van con anil_id (y su especie oficial si existe)
     gen: 9,
     cargar: async () => fichaAnil,
     evolucion: () => evolucionAnil(p),
@@ -181,8 +182,8 @@ async function pintarFicha(caja, d) {
  *  Cada uno con su portada (los primeros Pokémon del equipo), como los tableros de Pinterest. */
 async function opcionesEquipo(pokemonId, nombrePk) {
   const portada = eq => {
-    const ids = eq.miembros.slice().sort((a, b) => a.posicion - b.posicion).map(m => m.pokemon_id);
-    return ids.length ? ids.map(id => sprite(id, { tam: 20, alt: '' })) : [el('span', {}, '·')];
+    const ms = eq.miembros.slice().sort((a, b) => a.posicion - b.posicion);
+    return ms.length ? ms.map(m => datosMiembro(m).sprite(20)) : [el('span', {}, '·')];
   };
   const b = borrador();
   const enEdicion = {

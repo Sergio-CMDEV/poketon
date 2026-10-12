@@ -1,6 +1,9 @@
 <?php
 // Copia este archivo como config.php y pon tus datos. config.php NO se sube a GitHub.
 return [
+    // true solo en tu PC: muestra el error real en la web. En el servidor, false
+    'debug' => false,
+
     // Base de datos
     'host'     => '192.168.1.X',     // IP local de la máquina de la base de datos
     'port'     => 3306,
@@ -12,7 +15,7 @@ return [
     'jwt_secret' => 'cambia-esto-por-una-clave-larga-y-aleatoria',
 
     // Dirección de la web (para el enlace de "recuperar contraseña")
-    'app_url' => 'http://localhost:8000',
+    'app_url' => 'http://localhost:8000',   // en el servidor: https://poketon.online
 
     // Orígenes que pueden llamar a la API desde otro sitio: la app de escritorio (Tauri)
     'cors' => ['http://tauri.localhost', 'tauri://localhost'],

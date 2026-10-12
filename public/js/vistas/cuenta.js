@@ -1,12 +1,17 @@
-// Pantallas 2, 3, 4 y 8 · Iniciar sesión, registro, recuperar contraseña (pasos 1 y 2), Mi cuenta y privacidad.
+// Pantallas 2, 3, 4, 8, 8b y 8c · Iniciar sesión, registro, recuperar contraseña (pasos 1 y 2), Mi cuenta,
+// Editar perfil (con el recorte de la foto) y privacidad.
 
-import { peticion, sesion, guardarSesion, cerrarSesion, esEscritorio, WEB } from '../api.js';
-import { catalogo } from '../datos.js';
-import { el, campoForm, aviso, poner, iconoGoogle } from '../ui.js';
-import { subirBorradorPendiente, borrador, misEquipos } from '../equipos.js';
+import { peticion, sesion, guardarSesion, cerrarSesion, esEscritorio, WEB, subirArchivo, actualizarUsuario } from '../api.js';
+import { catalogo, buscar } from '../datos.js';
+import { el, campoForm, aviso, poner, iconoGoogle, avatarUsuario, confirmar, sprite, ventana } from '../ui.js';
+import { formatoCodigo } from '../online.js';
+import { recortarFoto, TIPOS_FOTO } from '../recorte.js';
+import { subirBorradorPendiente, borrador, misEquipos, guardarBorrador, equipoVacio } from '../equipos.js';
 
 /** Tras entrar: guarda la sesión, sube el equipo pendiente y va a "Mis equipos". */
 async function entrar(datos) {
+  // Un equipo en edición que era de una cuenta (tiene id) no es de esta sesión: se empieza uno nuevo
+  if (borrador().id) guardarBorrador(equipoVacio());
   guardarSesion(datos);
   localStorage.setItem('ha-entrado', '1');   // la cabecera ofrecerá "Login" en vez de "Registrarse"
   try {
@@ -14,6 +19,17 @@ async function entrar(datos) {
     if (subido) aviso(`Tu equipo "${subido.nombre}" se ha guardado en la cuenta`);
   } catch (e) { aviso(`No se pudo guardar el equipo: ${e.message}`, 'error'); }
   window.dispatchEvent(new Event('sesion'));
+  // Se entró desde un enlace de amigo: la solicitud se manda ahora
+  const amigo = sessionStorage.getItem('amigo-pendiente');
+  if (amigo) {
+    sessionStorage.removeItem('amigo-pendiente');
+    try {
+      const r = await peticion('amigos.php?accion=solicitar', { method: 'POST', body: { destino: amigo } });
+      aviso(r.estado === 'aceptada' ? 'Ya sois amigos' : 'Solicitud de amistad enviada');
+    } catch (e) { aviso(e.message, 'error'); }
+    location.hash = '#/amigos';
+    return;
+  }
   // Si se entró para conectar la app de escritorio, se vuelve a la app; si no, a "Mis equipos"
   if (sessionStorage.getItem('escritorio')) {
     try { await completarEscritorio(); } catch (e) { aviso(e.message, 'error'); location.hash = '#/equipos'; }
@@ -154,7 +170,11 @@ export function vistaRegistro(raiz) {
       campoForm('Contraseña', password),
       campoForm('Repite la contraseña', repetida, noCoinciden),
       el('label', { class: 'check-legal' }, input('privacidad', 'checkbox', { value: 'si' }),
-        el('span', {}, 'Acepto la ', el('a', { href: '#/privacidad', target: '_blank' }, 'política de privacidad'))),
+        // Se abre en una ventana encima: así no se sale del registro ni se pierde lo escrito
+        el('span', {}, 'Acepto la ', el('a', { href: '#/privacidad', onclick: e => {
+          e.preventDefault();
+          ventana(cerrar => [textoPrivacidad(), el('button', { class: 'btn', type: 'button', onclick: cerrar }, 'Entendido')], { titulo: 'Política de privacidad' });
+        } }, 'política de privacidad'))),
       pendientes && el('p', { class: 'msg info' }, `Tienes 1 equipo sin guardar (${b.miembros.length} Pokémon). Se añadirá a tu cuenta al registrarte.`),
     ], 'Crear cuenta', async d => {
       if (!comprobar()) throw new Error('Las contraseñas no coinciden');
@@ -210,9 +230,10 @@ export function vistaRestablecer(raiz, token) {
 export async function vistaCuenta(raiz) {
   if (!sesion()) { location.hash = '#/login'; return; }
   poner(raiz, el('p', { class: 'nota' }, 'Cargando…'));
-  let u, equipos;
-  try { [u, equipos] = await Promise.all([peticion('auth.php?accion=yo'), misEquipos()]); }
+  let u, equipos, perfil;
+  try { [u, equipos, perfil] = await Promise.all([peticion('auth.php?accion=yo'), misEquipos(), peticion('perfil.php')]); }
   catch (e) { poner(raiz, el('p', { class: 'msg error' }, e.message)); return; }
+  actualizarUsuario({ nombre: u.nombre, usuario: u.usuario, foto: u.foto, avatar: u.avatar });
 
   const salir = () => { cerrarSesion(); window.dispatchEvent(new Event('sesion')); location.hash = '#/'; };
 
@@ -245,29 +266,187 @@ export async function vistaCuenta(raiz) {
       } }, 'Vincular'));
 
   poner(raiz,
-    el('div', { class: 'perfil' }, el('span', { class: 'avatar grande' }, u.nombre[0].toUpperCase()),
-      el('div', {}, el('b', {}, u.nombre), el('div', { class: 'tenue' }, `${u.email} · ${equipos.length} equipo${equipos.length === 1 ? '' : 's'}`))),
+    el('div', { class: 'perfil' }, avatarUsuario(u, 52, { propio: true }),
+      el('div', { class: 'perfil-texto' }, el('b', {}, u.nombre, ' ', el('span', { class: 'arroba' }, `@${u.usuario}`)),
+        el('div', { class: 'tenue' }, `${u.email} · ${equipos.length} equipo${equipos.length === 1 ? '' : 's'} · ${perfil.amigos} amigo${perfil.amigos === 1 ? '' : 's'}`)),
+      el('a', { class: 'btn-contorno', href: '#/perfil' }, 'Editar perfil')),
 
     el('section', { class: 'tarjeta-form compacta' }, el('b', {}, u.tiene_password ? 'Cambiar contraseña' : 'Crear contraseña'),
       formulario([
         u.tiene_password && campoForm('Contraseña actual', input('actual', 'password', { autocomplete: 'current-password' })),
         campoForm('Nueva contraseña', input('nueva', 'password', { minlength: 8, autocomplete: 'new-password', placeholder: 'Mínimo 8 caracteres' })),
       ], 'Guardar contraseña', async d => {
-        await peticion('auth.php?accion=cambiar-password', { method: 'POST', body: d });
-        aviso('Contraseña guardada');
+        const r = await peticion('auth.php?accion=cambiar-password', { method: 'POST', body: d });
+        guardarSesion({ ...sesion(), token: r.token });   // esta sesión sigue; las de otros dispositivos se cierran
+        aviso('Contraseña guardada. Se ha cerrado la sesión en los demás dispositivos');
         vistaCuenta(raiz);
       })),
 
     filaGoogle,
     el('button', { class: 'btn sec mini', onclick: salir }, 'Cerrar sesión'),
+    el('button', { class: 'enlace-btn centrado', type: 'button', onclick: async () => {
+      if (!await confirmar('¿Cerrar la sesión en los demás dispositivos?', 'Tendrán que volver a iniciar sesión. En este sigues dentro.', 'Cerrar sesiones', { peligro: false })) return;
+      try {
+        const r = await peticion('auth.php?accion=cerrar-sesiones', { method: 'POST' });
+        guardarSesion({ ...sesion(), token: r.token });
+        aviso('Sesión cerrada en los demás dispositivos');
+      } catch (e) { aviso(e.message, 'error'); }
+    } }, 'Cerrar sesión en los demás dispositivos'),
 
     el('section', { class: 'tarjeta-form compacta peligro' }, el('b', {}, 'Eliminar cuenta'),
-      el('p', { class: 'sub', style: { fontSize: '13px' } }, 'Se borran tu cuenta y tus equipos para siempre. Escribe ELIMINAR para confirmar.'),
-      formulario([input('confirmacion', 'text', { placeholder: 'ELIMINAR', 'aria-label': 'Confirmación' })], 'Eliminar mi cuenta', async d => {
+      el('p', { class: 'sub', style: { fontSize: '13px' } }, 'Se borran tu cuenta, tus equipos, tus amigos y tus chats para siempre. Escribe ELIMINAR para confirmar'
+        + (u.tiene_password ? ' y tu contraseña.' : '.')),
+      formulario([
+        input('confirmacion', 'text', { placeholder: 'ELIMINAR', 'aria-label': 'Confirmación' }),
+        u.tiene_password && input('password', 'password', { placeholder: 'Contraseña', 'aria-label': 'Contraseña', autocomplete: 'current-password' }),
+      ], 'Eliminar mi cuenta', async d => {
         await peticion('auth.php?accion=borrar-cuenta', { method: 'POST', body: d });
         aviso('Cuenta eliminada');
         salir();
       }, { peligro: true })),
+  );
+}
+
+/* ---------- 8b · Editar perfil ---------- */
+
+// Pokémon que salen para elegir como avatar (con el buscador se puede elegir cualquiera)
+const AVATARES = [25, 7, 1, 4, 94, 135, 131, 700, 133, 150, 212, 149];
+
+export async function vistaPerfil(raiz) {
+  if (!sesion()) { location.hash = '#/login'; return; }
+  poner(raiz, el('p', { class: 'nota' }, 'Cargando…'));
+  let p;
+  try { p = await peticion('perfil.php'); } catch (e) { poner(raiz, el('p', { class: 'msg error' }, e.message)); return; }
+
+  // Cada cambio que devuelve la API se aplica a la pantalla y a la sesión (la cabecera enseña la foto)
+  const aplicar = nuevo => {
+    p = nuevo;
+    actualizarUsuario({ nombre: p.nombre, usuario: p.usuario, foto: p.foto, avatar: p.avatar });
+    pintarFoto();
+    poner(codigo, formatoCodigo(p.codigo));
+    pintarBloqueados();
+    window.dispatchEvent(new Event('perfil'));
+  };
+
+  /* Foto o Pokémon */
+  const caja = el('div', { class: 'foto-actual' });
+  const notaFoto = el('p', { class: 'nota' });
+  const archivo = el('input', { type: 'file', accept: TIPOS_FOTO.join(','), hidden: true, onchange: async () => {
+    const f = archivo.files[0];
+    archivo.value = '';
+    if (!f) return;
+    try {
+      const recorte = await recortarFoto(f);
+      if (!recorte) return;
+      aviso('Subiendo foto…');
+      aplicar(await subirArchivo('perfil.php?accion=foto', 'foto', recorte, recorte.type === 'image/webp' ? 'foto.webp' : 'foto.jpg'));
+      aviso('Foto guardada');
+    } catch (e) { aviso(e.message, 'error'); }
+  } });
+  const subir = el('button', { class: 'btn-contorno', type: 'button', onclick: () => archivo.click() }, 'Subir una foto');
+  const quitar = el('button', { class: 'enlace-btn tenue', type: 'button', onclick: async () => {
+    try { aplicar(await peticion('perfil.php?accion=foto', { method: 'DELETE' })); aviso('Foto quitada'); } catch (e) { aviso(e.message, 'error'); }
+  } }, 'Quitar foto');
+  const rejilla = el('div', { class: 'rejilla-avatares' });
+  const buscador = el('input', { type: 'search', placeholder: 'Buscar otro Pokémon…', 'aria-label': 'Buscar un Pokémon para el avatar',
+    oninput: () => pintarRejilla() });
+
+  function pintarFoto() {
+    poner(caja, avatarUsuario(p, 76, { propio: true }));
+    quitar.hidden = !p.foto;
+    subir.disabled = p.fotos_restantes === 0;
+    poner(notaFoto, 'JPG, PNG, WebP o GIF (se usa el primer fotograma) de hasta 8 MB. Antes de guardarla la colocas y ajustas el zoom. ',
+      p.fotos_restantes === 0 ? 'Ya has cambiado la foto 3 veces hoy: prueba mañana.' : `Puedes cambiarla 3 veces al día (hoy te quedan ${p.fotos_restantes}).`);
+    pintarRejilla();
+  }
+  function pintarRejilla() {
+    const q = buscador.value.trim();
+    const ids = q ? buscar(q, 9, 12).map(x => x.id) : AVATARES;
+    poner(rejilla, ids.length ? ids.map(id => el('button', { type: 'button', class: `avatar-poke${!p.foto && p.avatar === id ? ' on' : ''}`,
+      'aria-label': `Usar como avatar`, onclick: async () => {
+        try { aplicar(await peticion('perfil.php?accion=avatar', { method: 'POST', body: { avatar: id } })); aviso('Avatar cambiado'); }
+        catch (e) { aviso(e.message, 'error'); }
+      } }, sprite(id, { tam: 44 }))) : el('p', { class: 'nota' }, 'No hay ningún Pokémon con ese nombre.'));
+  }
+
+  /* Nombre y @usuario (con "✓ Libre" mientras se escribe) */
+  const usuario = el('input', { name: 'usuario', value: p.usuario, required: true, maxlength: 20, autocomplete: 'off', spellcheck: false, 'aria-label': 'Nombre de usuario' });
+  const estado = el('span', { class: 'estado-usuario' });
+  const marco = el('span', { class: 'con-arroba' }, el('span', { class: 'arroba' }, '@'), usuario, estado);
+  let espera;
+  usuario.addEventListener('input', () => {
+    usuario.value = usuario.value.toLowerCase().replace(/\s/g, '_');
+    clearTimeout(espera);
+    poner(estado, '');
+    marco.className = 'con-arroba';
+    if (usuario.value === p.usuario) return;
+    espera = setTimeout(async () => {
+      try {
+        const r = await peticion(`perfil.php?libre=${encodeURIComponent(usuario.value)}`);
+        const bien = r.valido && r.libre;
+        poner(estado, !r.valido ? '✗ No vale' : r.libre ? '✓ Libre' : '✗ Cogido');
+        marco.className = `con-arroba ${bien ? 'bien' : 'mal'}`;
+      } catch { /* sin conexión: se comprobará al guardar */ }
+    }, 400);
+  });
+
+  /* Código de amigo */
+  const codigo = el('b', { class: 'codigo-amigo' }, formatoCodigo(p.codigo));
+  const nuevoCodigo = async () => {
+    if (!await confirmar('¿Generar otro código?', 'El código y el enlace que tienes ahora dejarán de funcionar. Tus amigos no cambian.', 'Generar otro', { peligro: false })) return;
+    try { aplicar(await peticion('perfil.php?accion=nuevo-codigo', { method: 'POST' })); aviso('Código nuevo'); } catch (e) { aviso(e.message, 'error'); }
+  };
+
+  /* Privacidad y bloqueados */
+  const interruptor = (name, titulo, detalle, on) => el('label', { class: 'opcion-interruptor' },
+    el('span', {}, el('span', { class: 'titulo' }, titulo), el('small', {}, detalle)),
+    el('input', { type: 'checkbox', role: 'switch', name, checked: on }));
+  const bloqueados = el('div', { class: 'bloqueados' });
+  function pintarBloqueados() {
+    poner(bloqueados, el('span', { class: 'titulo' }, 'Usuarios bloqueados ', el('span', { class: 'tenue' }, `· ${p.bloqueados.length}`)),
+      p.bloqueados.length === 0 ? el('small', { class: 'tenue' }, 'No has bloqueado a nadie.')
+        : p.bloqueados.map(b => el('div', { class: 'fila-persona' }, avatarUsuario(b, 32),
+          el('div', { class: 'quien' }, el('b', {}, b.nombre, ' ', el('span', { class: 'arroba' }, `@${b.usuario}`))),
+          el('button', { class: 'btn-mini sec', type: 'button', onclick: async () => {
+            try {
+              await peticion('amigos.php?accion=desbloquear', { method: 'POST', body: { usuario_id: b.id } });
+              p.bloqueados = p.bloqueados.filter(x => x.id !== b.id);
+              pintarBloqueados();
+              aviso(`Has desbloqueado a ${b.nombre}`);
+            } catch (e) { aviso(e.message, 'error'); }
+          } }, 'Desbloquear'))));
+  }
+
+  pintarFoto();
+  pintarBloqueados();
+  poner(raiz,
+    el('h1', {}, 'Editar perfil'),
+    el('section', { class: 'tarjeta' },
+      el('b', { class: 'tarjeta-titulo' }, 'Foto de perfil'),
+      el('div', { class: 'fila-foto' }, caja, el('div', { class: 'botones-foto' }, subir, quitar, archivo)),
+      el('span', { class: 'sub pequeño' }, 'O elige un Pokémon como avatar:'),
+      buscador, rejilla, notaFoto),
+    formulario([
+      el('section', { class: 'tarjeta' },
+        campoForm('Nombre', el('input', { name: 'nombre', value: p.nombre, required: true, maxlength: 30, autocomplete: 'nickname' })),
+        el('label', { class: 'campo-form' }, el('span', {}, 'Nombre de usuario'), marco,
+          el('small', { class: 'tenue' }, '3-20 letras (sin tildes), números o _. Con él te pueden buscar para añadirte.'))),
+      el('section', { class: 'tarjeta' },
+        el('span', { class: 'lbl' }, 'Código de amigo'),
+        el('div', { class: 'fila' }, codigo, el('button', { class: 'btn-mini sec', type: 'button', onclick: nuevoCodigo }, 'Generar otro')),
+        el('p', { class: 'nota' }, 'Si generas otro, el anterior y su enlace dejan de funcionar. Tus amigos no cambian.')),
+      el('section', { class: 'tarjeta' },
+        el('b', { class: 'tarjeta-titulo' }, 'Privacidad'),
+        interruptor('acepta_solicitudes', 'Recibir solicitudes de amistad', 'Si lo quitas, nadie puede añadirte con tu código ni tu @', p.acepta_solicitudes),
+        interruptor('muestra_en_linea', 'Mostrar si estoy en línea', 'Tus amigos ven el punto verde y "Hace 3 h"', p.muestra_en_linea),
+        bloqueados),
+    ], 'Guardar cambios', async d => {
+      aplicar(await peticion('perfil.php', { method: 'POST', body: {
+        nombre: d.nombre, usuario: d.usuario, acepta_solicitudes: d.acepta_solicitudes === 'on', muestra_en_linea: d.muestra_en_linea === 'on' } }));
+      poner(estado, '');
+      marco.className = 'con-arroba';
+      aviso('Perfil guardado');
+    }, { clase: 'form-perfil' }),
   );
 }
 
@@ -276,14 +455,24 @@ export async function vistaCuenta(raiz) {
 export function vistaPrivacidad(raiz) {
   poner(raiz,
     el('h1', {}, 'Política de privacidad'),
-    el('div', { class: 'texto-legal' },
+    textoPrivacidad(),
+    // "Volver" vuelve a donde se estaba (si se llegó desde otra pantalla); si se abrió el enlace directamente, al inicio
+    el('p', { class: 'centro' }, el('a', { href: '#/', onclick: e => { if (history.length > 1) { e.preventDefault(); history.back(); } } }, 'Volver')),
+  );
+}
+
+function textoPrivacidad() {
+  return el('div', { class: 'texto-legal' },
       el('p', {}, 'Poketon es un proyecto de fin de curso sin ánimo de lucro. Solo guardamos lo necesario para que tu cuenta funcione:'),
       el('p', {}, '• Tu email y tu nombre de entrenador, para identificarte.'),
       el('p', {}, '• Tu contraseña cifrada (nunca se guarda tal cual) o el identificador de tu cuenta de Google si entras con ella.'),
       el('p', {}, '• Tus equipos.'),
+      el('p', {}, '• Si usas la parte online: tu nombre de usuario, tu foto o Pokémon de perfil, tus amigos, solicitudes y bloqueos, '
+        + 'tus mensajes y los equipos que compartes, y tu última conexión (para "En línea"; puedes ocultarla en Editar perfil).'),
+      el('p', {}, 'La foto se guarda recortada en 256 × 256 y sin datos de la cámara ni de ubicación. Tus amigos y quien abra tu enlace de amigo '
+        + 've tu nombre, tu @usuario y tu foto. Los mensajes solo los ven las dos personas del chat. "Borrar chat" lo borra para ti; '
+        + 'cuando los dos lo habéis borrado, se elimina del servidor.'),
       el('p', {}, 'No usamos cookies de seguimiento ni compartimos tus datos con nadie. El equipo que montes sin cuenta se queda en tu navegador.'),
-      el('p', {}, 'Puedes borrar tu cuenta y todos tus datos cuando quieras desde "Mi cuenta → Eliminar cuenta".'),
-      el('p', { class: 'nota' }, 'Proyecto fan no oficial. Pokémon © Nintendo / Creatures / Game Freak. Datos y sprites: PokeAPI. Sets: Smogon.')),
-    el('p', { class: 'centro' }, el('a', { href: '#/' }, 'Volver')),
-  );
+      el('p', {}, 'Puedes borrar tu cuenta y todos tus datos (también tu foto, tus amigos y tus chats) cuando quieras desde "Mi cuenta → Eliminar cuenta".'),
+      el('p', { class: 'nota' }, 'Proyecto fan no oficial. Pokémon © Nintendo / Creatures / Game Freak. Datos y sprites: PokeAPI. Sets: Smogon.'));
 }

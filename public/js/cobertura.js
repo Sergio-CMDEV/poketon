@@ -1,23 +1,24 @@
 // Tabla de cobertura defensiva de un equipo: qué le pega cada tipo atacante a cada miembro,
 // con el total de débiles y de resistentes por tipo. Se usa en "Mis equipos" y en el editor.
 
-import { tablaTipos, multiplicador, tiposEn, pokemon } from './datos.js';
-import { el, chip, sprite } from './ui.js';
+import { tablaTipos, multiplicador } from './datos.js';
+import { el, chip } from './ui.js';
+import { datosMiembro } from './miembro.js';
 
 const TEXTO = { 4: '×4', 2: '×2', 0.5: '½', 0.25: '¼' };
 
-/** miembros: titulares [{ pokemon_id, shiny }]. Devuelve la tabla y la frase del punto débil. */
+/** miembros: titulares [{ pokemon_id, anil_id?, shiny }]. Devuelve la tabla y la frase del punto débil. */
 export function tablaCobertura(miembros, gen) {
   const tabla = tablaTipos(gen);
   // Columnas en el orden de los huecos (al mover un Pokémon de sitio cambia su posición, no su lugar en la lista)
   const equipo = miembros.slice().sort((a, b) => (a.posicion ?? 0) - (b.posicion ?? 0))
-    .map(m => ({ p: pokemon(m.pokemon_id), shiny: m.shiny })).filter(x => x.p);
+    .map(m => datosMiembro(m, gen)).filter(x => x.tipos.length);
   if (!equipo.length) return [el('p', { class: 'nota' }, 'Añade Pokémon para ver la cobertura del equipo.')];
 
   const rejilla = el('div', { class: 'cobertura', style: { gridTemplateColumns: `70px repeat(${equipo.length}, minmax(0, 1fr)) 44px 44px` } });
   rejilla.append(el('span', { class: 'cab esquina' }, 'ATAQUE ↓'));
-  for (const { p, shiny } of equipo) {
-    rejilla.append(el('span', { class: 'cab miembro', title: p.nombre }, sprite(p.id, { tam: 26, shiny, alt: '' }), el('small', {}, p.nombre)));
+  for (const x of equipo) {
+    rejilla.append(el('span', { class: 'cab miembro', title: x.nombre }, x.sprite(26), el('small', {}, x.nombre)));
   }
   rejilla.append(el('span', { class: 'cab t-mal' }, 'Débil'), el('span', { class: 'cab t-bien' }, 'Resiste'));
 
@@ -25,8 +26,8 @@ export function tablaCobertura(miembros, gen) {
   for (const t of tabla.tipos) {
     let debiles = 0, resisten = 0;
     rejilla.append(el('span', { class: 'fila-tipo' }, chip(t.clave)));
-    for (const { p } of equipo) {
-      const m = multiplicador(tabla, t.clave, tiposEn(p, gen));
+    for (const x of equipo) {
+      const m = multiplicador(tabla, t.clave, x.tipos);
       if (m > 1) debiles++;
       if (m < 1) resisten++;
       if (m === 0) rejilla.append(el('span', { class: 'celda inmune' }, 'Inmune'));

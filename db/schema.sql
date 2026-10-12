@@ -7,7 +7,8 @@ SET NAMES utf8mb4;
 
 -- Para poder recrear la BD desde cero: borra en orden inverso a las dependencias
 SET FOREIGN_KEY_CHECKS = 0;
-DROP TABLE IF EXISTS set_competitivo, miembro_movimiento, miembro_equipo, equipo, intento_login, token_recuperacion, usuario,
+DROP TABLE IF EXISTS accion_limitada, mensaje, conversacion_miembro, conversacion, bloqueo, amistad,
+                     set_competitivo, miembro_movimiento, miembro_equipo, equipo, intento_login, token_recuperacion, usuario,
                      evolucion, pokemon_movimiento, pokemon_habilidad, pokemon_tipo, pokemon, especie,
                      movimiento, habilidad, objeto, naturaleza, eficacia, tipo;
 SET FOREIGN_KEY_CHECKS = 1;
@@ -186,10 +187,21 @@ CREATE TABLE usuario (
   id             INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   email          VARCHAR(254) NOT NULL UNIQUE,
   nombre         VARCHAR(30) NOT NULL,
+  nombre_usuario VARCHAR(20) NULL UNIQUE,          -- @usuario (online), en minúsculas; lo crea PHP
+  codigo_amigo   CHAR(8) NULL UNIQUE,              -- se enseña como PKT-XXXX-XXXX; lo crea PHP
+  foto           CHAR(37) NULL,                    -- "<32 hex>.webp" en public/fotos/
+  avatar_pokemon_id SMALLINT UNSIGNED NULL,        -- o un Pokémon como avatar
   password_hash  VARCHAR(255) NULL,                -- NULL si solo entra con Google
   google_id      VARCHAR(64) NULL UNIQUE,
   creado_en      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  CHECK (password_hash IS NOT NULL OR google_id IS NOT NULL)   -- al menos una forma de entrar
+  acepta_solicitudes BOOLEAN NOT NULL DEFAULT TRUE,
+  muestra_en_linea   BOOLEAN NOT NULL DEFAULT TRUE,
+  ultima_conexion    DATETIME NULL,
+  version_sesion     INT UNSIGNED NOT NULL DEFAULT 0,   -- sube al cambiar la contraseña: cierra las demás sesiones
+  FOREIGN KEY (avatar_pokemon_id) REFERENCES pokemon(id) ON DELETE SET NULL,
+  CHECK (password_hash IS NOT NULL OR google_id IS NOT NULL),  -- al menos una forma de entrar
+  CHECK (nombre_usuario IS NULL OR nombre_usuario REGEXP BINARY '^[a-z0-9_]{3,20}$'),
+  CHECK (codigo_amigo IS NULL OR codigo_amigo REGEXP BINARY '^[2-9A-HJKMNP-Z]{8}$')
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Enlaces de "recuperar contraseña". Se guarda el hash del token, nunca el token.
@@ -202,13 +214,14 @@ CREATE TABLE token_recuperacion (
   FOREIGN KEY (usuario_id) REFERENCES usuario(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Intentos de login fallidos, para bloquear tras 5 seguidos.
+-- Intentos de login fallidos: 5 seguidos desde la misma IP bloquean ese email 15 min (desde otra IP se puede entrar).
 CREATE TABLE intento_login (
   id     BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   email  VARCHAR(254) NOT NULL,
   ip     VARCHAR(45) NOT NULL,                     -- 45 caracteres caben en IPv6
   fecha  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  INDEX (email, fecha)
+  INDEX (email, fecha),
+  INDEX intento_ip (ip, fecha)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- El máximo de 8 equipos por usuario y el nombre "Equipo N" se controlan en PHP.
@@ -229,7 +242,8 @@ CREATE TABLE miembro_equipo (
   id             INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   equipo_id      INT UNSIGNED NOT NULL,
   posicion       TINYINT UNSIGNED NOT NULL,
-  pokemon_id     SMALLINT UNSIGNED NOT NULL,
+  pokemon_id     SMALLINT UNSIGNED NULL,           -- NULL solo en formas propias de Pokémon Añil sin especie oficial
+  anil_id        VARCHAR(40) NULL,                 -- forma propia de Pokémon Añil ("RAICHU_2"); sus datos no están en la BD
   apodo          VARCHAR(20) NULL,
   objeto_id      SMALLINT UNSIGNED NULL,
   habilidad_id   SMALLINT UNSIGNED NULL,
@@ -257,6 +271,7 @@ CREATE TABLE miembro_equipo (
   FOREIGN KEY (naturaleza_id) REFERENCES naturaleza(id) ON DELETE SET NULL,
   FOREIGN KEY (teratipo_id) REFERENCES tipo(id) ON DELETE SET NULL,
   CHECK (posicion BETWEEN 1 AND 8),
+  CHECK (pokemon_id IS NOT NULL OR anil_id IS NOT NULL),
   CHECK (nivel BETWEEN 1 AND 100),
   CHECK (ev_ps <= 252 AND ev_ataque <= 252 AND ev_defensa <= 252
          AND ev_at_esp <= 252 AND ev_def_esp <= 252 AND ev_velocidad <= 252),
@@ -274,4 +289,93 @@ CREATE TABLE miembro_movimiento (
   FOREIGN KEY (miembro_id) REFERENCES miembro_equipo(id) ON DELETE CASCADE,
   FOREIGN KEY (movimiento_id) REFERENCES movimiento(id),
   CHECK (slot BETWEEN 1 AND 4)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+/* ---------------------------------------------------------------------
+   Online: amigos, bloqueos y chats
+   --------------------------------------------------------------------- */
+
+-- Amistades y solicitudes. Una fila por pareja: usuario_a es siempre el id menor.
+-- Rechazar o cancelar una solicitud borra la fila.
+CREATE TABLE amistad (
+  usuario_a       INT UNSIGNED NOT NULL,
+  usuario_b       INT UNSIGNED NOT NULL,
+  solicitante_id  INT UNSIGNED NOT NULL,                 -- quién mandó la solicitud
+  estado          ENUM('pendiente','aceptada') NOT NULL DEFAULT 'pendiente',
+  creado_en       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  aceptada_en     DATETIME NULL,                         -- "Amigos desde…"
+  PRIMARY KEY (usuario_a, usuario_b),
+  INDEX (usuario_b),
+  FOREIGN KEY (usuario_a) REFERENCES usuario(id) ON DELETE CASCADE,
+  FOREIGN KEY (usuario_b) REFERENCES usuario(id) ON DELETE CASCADE,
+  CHECK (usuario_a < usuario_b),
+  CHECK (solicitante_id IN (usuario_a, usuario_b)),
+  CHECK ((estado = 'aceptada') = (aceptada_en IS NOT NULL))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Bloqueos. Bloquear borra la amistad o la solicitud que hubiera.
+CREATE TABLE bloqueo (
+  usuario_id    INT UNSIGNED NOT NULL,                   -- quien bloquea
+  bloqueado_id  INT UNSIGNED NOT NULL,
+  creado_en     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (usuario_id, bloqueado_id),
+  INDEX (bloqueado_id),
+  FOREIGN KEY (usuario_id) REFERENCES usuario(id) ON DELETE CASCADE,
+  FOREIGN KEY (bloqueado_id) REFERENCES usuario(id) ON DELETE CASCADE,
+  CHECK (usuario_id <> bloqueado_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Chats. Los de 1 a 1 llevan la pareja (id menor en usuario_a) para no repetirlos;
+-- los de grupo (futuro) la dejan en NULL.
+CREATE TABLE conversacion (
+  id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  usuario_a  INT UNSIGNED NULL,
+  usuario_b  INT UNSIGNED NULL,
+  creado_en  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (usuario_a, usuario_b),
+  FOREIGN KEY (usuario_a) REFERENCES usuario(id) ON DELETE CASCADE,
+  FOREIGN KEY (usuario_b) REFERENCES usuario(id) ON DELETE CASCADE,
+  CHECK (usuario_a < usuario_b)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Quién está en cada chat, hasta qué mensaje ha leído (para "sin leer" y "Visto")
+-- y hasta cuál ha borrado ("Borrar chat" solo lo borra para él; lo que han borrado los dos se elimina).
+CREATE TABLE conversacion_miembro (
+  conversacion_id  INT UNSIGNED NOT NULL,
+  usuario_id       INT UNSIGNED NOT NULL,
+  ultimo_leido     BIGINT UNSIGNED NOT NULL DEFAULT 0,   -- id del último mensaje visto
+  borrado_hasta    BIGINT UNSIGNED NOT NULL DEFAULT 0,   -- no ve los mensajes con id <= este
+  PRIMARY KEY (conversacion_id, usuario_id),
+  INDEX (usuario_id),
+  FOREIGN KEY (conversacion_id) REFERENCES conversacion(id) ON DELETE CASCADE,
+  FOREIGN KEY (usuario_id) REFERENCES usuario(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Mensajes: texto, equipo compartido (copia en JSON) o los dos.
+CREATE TABLE mensaje (
+  id               BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  conversacion_id  INT UNSIGNED NOT NULL,
+  autor_id         INT UNSIGNED NOT NULL,
+  texto            VARCHAR(1000) NULL,
+  equipo           JSON NULL,                            -- mismo formato que devuelve equipos.php
+  creado_en        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX (conversacion_id, id),                           -- "mensajes desde el id X" del sondeo
+  INDEX (autor_id, creado_en),                           -- límite de mensajes por minuto
+  FOREIGN KEY (conversacion_id) REFERENCES conversacion(id) ON DELETE CASCADE,
+  FOREIGN KEY (autor_id) REFERENCES usuario(id) ON DELETE CASCADE,
+  CHECK (texto IS NOT NULL OR equipo IS NOT NULL),
+  CHECK (CHAR_LENGTH(texto) BETWEEN 1 AND 1000)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Acciones con límite (solicitudes, búsquedas de código, fotos: 3 al día), para frenar abusos.
+-- Se borran las de más de 2 días.
+CREATE TABLE accion_limitada (
+  id          BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  usuario_id  INT UNSIGNED NULL,                         -- NULL si no hay sesión (enlace de amigo)
+  ip          VARCHAR(45) NOT NULL,
+  tipo        ENUM('solicitud','buscar','foto') NOT NULL,
+  fecha       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX (tipo, usuario_id, fecha),
+  INDEX (tipo, ip, fecha),
+  FOREIGN KEY (usuario_id) REFERENCES usuario(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -11,13 +11,40 @@
   "app": {
     "withGlobalTauri": true,
     "windows": [
-      { "title": "Poketon", "width": 480, "height": 860, "minWidth": 360, "minHeight": 520 }
+      {
+        "title": "Poketon",
+        "width": 480,
+        "height": 860,
+        "minWidth": 360,
+        "minHeight": 520
+      }
     ],
-    "security": { "csp": null }
+    "security": {
+      "csp": null
+    }
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.ico"]
+    "targets": [
+      "nsis"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ],
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDRGQzg1NEQ2Mjg4MzY4MkMKUldRc2FJTW8xbFRJVCtpdHNFZkt5QWZycS9TU2FXSjNkaFQyOGxnSnpweDBJbHgwcEJ6NjArazgK",
+      "endpoints": [
+        "https://github.com/Sergio-CMDEV/poketon/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

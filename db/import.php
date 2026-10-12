@@ -13,10 +13,19 @@ declare(strict_types=1);
 
 const CSV_URL  = 'https://raw.githubusercontent.com/PokeAPI/pokeapi/master/data/v2/csv/';
 const SETS_URL = 'https://raw.githubusercontent.com/pkmn/smogon/main/data/sets/';   // sets de Smogon por generación
-const CACHE    = __DIR__ . '/cache';   // los CSV se guardan aquí para no descargarlos cada vez
 const ES       = '7';                  // id del idioma español en PokeAPI
 const EN       = '9';
 const LOTE     = 500;                  // filas por INSERT
+
+// Caché de las descargas (para no bajarlas cada vez): db/cache si se puede escribir; si no (en Docker la carpeta
+// del proyecto es de solo lectura), la carpeta temporal del sistema
+define('CACHE', (function () {
+    $dir = __DIR__ . '/cache';
+    if ((is_dir($dir) || @mkdir($dir, 0775, true)) && is_writable($dir)) return $dir;
+    $tmp = sys_get_temp_dir() . '/poketon-cache';
+    if (!is_dir($tmp)) mkdir($tmp, 0775, true);
+    return $tmp;
+})());
 
 $config = require __DIR__ . '/../config.php';   // configuración compartida en la raíz del proyecto
 foreach (['pdo_mysql', 'mbstring', 'openssl'] as $ext) {
@@ -39,7 +48,6 @@ $inicio = microtime(true);
 /** Descarga un CSV de PokeAPI (o lo lee de la caché) y devuelve sus filas como arrays asociativos. */
 function csv(string $nombre): Generator
 {
-    if (!is_dir(CACHE)) mkdir(CACHE, 0775, true);
     $ruta = CACHE . "/$nombre.csv";
     if (!is_file($ruta)) {
         echo "  descargando $nombre.csv\n";
@@ -134,15 +142,35 @@ $nulo = fn($v) => ($v === '' ? null : $v);
    Vaciar las tablas de datos del juego
    ====================================================================== */
 
+// 1) Primero se descarga todo lo imprescindible. Si algo falla aquí, la base de datos no se ha tocado.
+echo "Descargando datos…\n";
+try {
+    foreach (['abilities', 'ability_flavor_text', 'ability_names', 'item_categories', 'item_flavor_text', 'item_names', 'items',
+              'machines', 'move_flavor_text', 'move_names', 'moves', 'nature_names', 'natures', 'pokemon', 'pokemon_abilities',
+              'pokemon_evolution', 'pokemon_moves', 'pokemon_species', 'pokemon_species_names', 'pokemon_stats', 'pokemon_types',
+              'pokemon_types_past', 'type_efficacy', 'type_efficacy_past', 'type_names', 'types'] as $n) {
+        csv($n)->current();   // csv() descarga el archivo al empezar a leerlo
+    }
+    showdown('items.ts');
+    showdown('text/items.ts');
+} catch (Throwable $e) {
+    exit("Error: {$e->getMessage()}\nNo se ha tocado la base de datos. Comprueba la conexión y vuelve a lanzarlo.\n");
+}
+
+// 2) Vaciar y llenar en una sola transacción (DELETE, no TRUNCATE, para que se pueda deshacer):
+//    si algo falla a medias, se deshace todo y la base de datos se queda como estaba
+set_exception_handler(function (Throwable $e) use ($pdo) {
+    if ($pdo->inTransaction()) $pdo->rollBack();
+    fwrite(STDERR, "Error: {$e->getMessage()}\nSe ha deshecho todo: la base de datos se queda como estaba.\n");
+    exit(1);
+});
 echo "Vaciando tablas de datos…\n";
-$pdo->exec('SET FOREIGN_KEY_CHECKS = 0');
+$pdo->exec('SET FOREIGN_KEY_CHECKS = 0');   // los equipos de los usuarios apuntan a estos ids; se vuelven a poner iguales
+$pdo->beginTransaction();
 foreach (['set_competitivo', 'evolucion', 'pokemon_movimiento', 'pokemon_habilidad', 'pokemon_tipo', 'pokemon', 'especie',
           'movimiento', 'habilidad', 'objeto', 'naturaleza', 'eficacia', 'tipo'] as $t) {
-    $pdo->exec("TRUNCATE TABLE $t");
+    $pdo->exec("DELETE FROM $t");
 }
-$pdo->exec('SET FOREIGN_KEY_CHECKS = 1');
-
-$pdo->beginTransaction();
 echo "Importando…\n";
 
 /* ======================================================================
@@ -475,8 +503,7 @@ if (!is_file($hoja)) {
     @mkdir(dirname($hoja), 0775, true);
     $png = @file_get_contents('https://play.pokemonshowdown.com/sprites/itemicons-sheet.png', false,
         stream_context_create(['http' => ['header' => "User-Agent: Poketon (proyecto de clase)\r\n"]]));
-    if ($png) file_put_contents($hoja, $png);
-    else echo "  aviso: no se pudo descargar la hoja de iconos de Showdown (la web la cargará de su servidor)\n";
+    if (!$png || !@file_put_contents($hoja, $png)) echo "  aviso: no se pudo guardar la hoja de iconos de Showdown (la web la cargará de su servidor)\n";
 }
 
 $nombreNaturaleza = nombres('nature_names', 'nature_id');
@@ -617,4 +644,5 @@ insertar($pdo, 'set_competitivo', ['pokemon_id', 'generacion', 'formato', 'nombr
     })());
 
 $pdo->commit();
+$pdo->exec('SET FOREIGN_KEY_CHECKS = 1');
 printf("Hecho en %.1f s\n", microtime(true) - $inicio);

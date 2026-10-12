@@ -8,6 +8,9 @@ services:
       dockerfile: docker/php.Dockerfile
     volumes:
       - ./:/var/www:ro
+      # Fotos de perfil: la única carpeta donde PHP escribe. Antes del primer arranque:
+      #   mkdir -p public/fotos && chown 82:82 public/fotos     (82 = www-data en Alpine)
+      - ./public/fotos:/var/www/public/fotos
     restart: unless-stopped
 
   nginx:
