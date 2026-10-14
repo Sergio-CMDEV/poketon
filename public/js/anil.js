@@ -1,5 +1,5 @@
 // Pokémon Añil (fangame). Sus datos los genera scripts/anil.mjs en public/anil/, que no se sube a GitHub
-// (uso personal). Si no existen, la opción "Pokémon Añil" no aparece y la app funciona igual.
+// (se copian a mano al servidor). Si no existen, la opción "Pokémon Añil" no aparece y la app funciona igual.
 
 import { catalogo, normalizar } from './datos.js';
 import { usarIconosLocales } from './ui.js';

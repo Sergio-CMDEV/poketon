@@ -133,27 +133,51 @@ export function vistaEditor(raiz) {
       el('option', { value: '' }, '—'), lista.map(x => el('option', { value: x.id, selected: x.id === actual }, texto(x))));
 
     const corto = s => ({ ataque: 'Atq', defensa: 'Def', at_esp: 'AtEsp', def_esp: 'DefEsp', velocidad: 'Vel' })[s];
+    // Randomlocke: vale cualquier habilidad y cualquier movimiento, sin avisos
+    const libre = !!eq.randomlocke;
     // Una habilidad que no le corresponde (p. ej. importada de un randomizer) se mantiene, con aviso
-    const habAjena = m.habilidad_id && !f.habilidades.some(h => h.id === m.habilidad_id) && mapas.habilidades.get(m.habilidad_id);
+    const habAjena = !libre && m.habilidad_id && !f.habilidades.some(h => h.id === m.habilidad_id) && mapas.habilidades.get(m.habilidad_id);
     const avisoHab = el('div', { style: { display: 'contents' } });
     const pintarAvisoHab = () => poner(avisoHab, habAjena && m.habilidad_id === habAjena.id
-      && el('p', { class: 'msg aviso' }, `⚠ ${p.nombre} no puede tener ${habAjena.nombre}. Puedes guardar igualmente.`));
-    const habilidad = desplegable([...f.habilidades, ...(habAjena ? [habAjena] : [])], m.habilidad_id,
-      h => (h === habAjena ? `⚠ ${h.nombre}` : h.nombre + (h.oculta ? ' (oculta)' : '')), v => { m.habilidad_id = v; pintarAvisoHab(); });
+      && el('p', { class: 'msg aviso' }, `⚠ ${p.nombre} no puede tener ${habAjena.nombre}. Puedes guardar igualmente (o activa Randomlocke arriba).`));
+    const alCambiarHab = v => { m.habilidad_id = v; pintarAvisoHab(); pintarCobertura(); };   // la habilidad cuenta en la cobertura (Levitación…)
+    const textoHab = h => h.nombre + (h.oculta ? ' (oculta)' : '');
+    let habilidad;
+    if (libre) {
+      // Primero las suyas y luego todas las demás por orden alfabético
+      const suyas = new Set(f.habilidades.map(h => h.id));
+      const opcion = (h, texto) => el('option', { value: h.id, selected: h.id === m.habilidad_id }, texto);
+      habilidad = el('select', { onchange: e => { alCambiarHab(+e.target.value || null); cambio(); } },
+        el('option', { value: '' }, '—'),
+        f.habilidades.length > 0 && el('optgroup', { label: `De ${p.nombre}` }, f.habilidades.map(h => opcion(h, textoHab(h)))),
+        el('optgroup', { label: 'Todas las demás' }, catalogo.habilidades.filter(h => !suyas.has(h.id)).map(h => opcion(h, h.nombre))));
+    } else {
+      habilidad = desplegable([...f.habilidades, ...(habAjena ? [habAjena] : [])], m.habilidad_id,
+        h => (h === habAjena ? `⚠ ${h.nombre}` : textoHab(h)), alCambiarHab);
+    }
     pintarAvisoHab();
     const teratipo = desplegable(catalogo.tipos, m.teratipo_id, t => t.nombre, v => { m.teratipo_id = v; });
     const naturaleza = desplegable(catalogo.naturalezas, m.naturaleza_id,
       n => n.nombre + (n.stat_sube ? ` (+${corto(n.stat_sube)} −${corto(n.stat_baja)})` : ''), v => { m.naturaleza_id = v; });
 
-    // EVs (máx. 252 cada uno y 510 en total) e IVs (0-31)
+    // EVs (máx. 252 cada uno y 510 en total) e IVs (0-31). Si en uno se escribe más del máximo se queda en el máximo
+    // (252: con 253-255 el stat ya no sube); si se pasa el total, se avisa
     const totalEvs = el('span');
+    const avisoEvs = el('div', { style: { display: 'contents' } });
     const pintarTotal = () => {
       const s = m.evs.reduce((a, b) => a + b, 0);
       totalEvs.textContent = `${s} / 510`;
       totalEvs.classList.toggle('pasado', s > 510);
+      poner(avisoEvs, s > 510 && el('p', { class: 'msg aviso' }, `⚠ Los EVs suman ${s} y el máximo es 510: quita ${s - 510}.`));
     };
     const seis = (lista, max, alCambiar = pintarTotal) => el('div', { class: 'seis' }, lista.map((v, i) => el('label', {}, el('small', {}, STATS_CORTO[i]),
-      el('input', { type: 'number', min: 0, max, step: 1, value: v, oninput: e => { lista[i] = Math.max(0, Math.min(max, Math.round(+e.target.value) || 0)); alCambiar(); cambio(); } }))));
+      el('input', { type: 'number', min: 0, max, step: 1, value: v,
+        oninput: e => {
+          const n = Math.max(0, Math.min(max, Math.round(+e.target.value) || 0));
+          if (+e.target.value > max || +e.target.value < 0) e.target.value = n;   // 270 → 252
+          lista[i] = n; alCambiar(); cambio();
+        },
+        onblur: e => { e.target.value = lista[i]; } }))));
     pintarTotal();
     const resumenIvs = el('summary');
     const pintarResumenIvs = () => {
@@ -164,7 +188,7 @@ export function vistaEditor(raiz) {
 
     // Movimientos: avisa si no lo puede aprender, pero deja guardar
     // Formas propias de Añil sin especie oficial: no hay lista de movimientos, así que valen todos y no se avisa
-    const sinLista = !f.movimientos;
+    const sinLista = libre || !f.movimientos;
     const aprendibles = new Set(sinLista ? catalogo.movimientos.map(x => x.id) : f.movimientos.map(x => x.id));
     const avisos = el('div', { style: { display: 'contents' } });
     const inputs = [0, 1, 2, 3].map(i => el('input', { list: 'dl-movs', value: mapas.movimientos.get(m.movimientos[i])?.nombre ?? '', placeholder: `Movimiento ${i + 1}` }));
@@ -206,12 +230,14 @@ export function vistaEditor(raiz) {
       avisoHab,
       el('div', { class: 'ev-cab' }, el('span', {}, 'EVs'), totalEvs),
       seis(m.evs, 252),
+      avisoEvs,
       el('details', { class: 'ivs' }, resumenIvs, seis(m.ivs, 31, pintarResumenIvs)),
       el('div', { class: 'movimientos' }, el('span', {}, 'Movimientos'),
         el('datalist', { id: 'dl-movs' }, [...aprendibles].map(id => mapas.movimientos.get(id)).filter(Boolean)
           .sort((a, b) => a.nombre.localeCompare(b.nombre)).map(mv => el('option', { value: mv.nombre }))),
-        m.anil_id && el('p', { class: 'nota' }, sinLista ? 'Forma propia de Pokémon Añil: no hay lista de movimientos, valen todos.'
-          : 'Forma propia de Pokémon Añil: se comprueban con los movimientos de su especie en los juegos oficiales.'),
+        libre ? el('p', { class: 'nota' }, 'Randomlocke: valen todos los movimientos.')
+          : m.anil_id && el('p', { class: 'nota' }, sinLista ? 'Forma propia de Pokémon Añil: no hay lista de movimientos, valen todos.'
+            : 'Forma propia de Pokémon Añil: se comprueban con los movimientos de su especie en los juegos oficiales.'),
         el('div', { class: 'lista-movs' }, inputs), avisos),
     );
   }
@@ -257,8 +283,15 @@ export function vistaEditor(raiz) {
     cambio(); pintarPanel(); pintarCobertura();
   });
 
+  const randomlocke = el('label', { class: 'opcion-interruptor randomlocke' },
+    el('span', {}, el('span', { class: 'titulo' }, 'Randomlocke'),
+      el('small', {}, 'Deja poner cualquier habilidad y movimiento, aunque el Pokémon no los tenga en los juegos')),
+    el('input', { type: 'checkbox', role: 'switch', checked: !!eq.randomlocke,
+      onchange: e => { eq.randomlocke = e.target.checked; cambio(); pintarPanel(); } }));
+
   poner(raiz,
     el('div', { class: 'nombre-gen' }, campo('Nombre', nombreInput), campo('Generación', genSelect)),
+    randomlocke,
     el('div', { class: 'lbl-fila' }, el('span', { class: 'lbl' }, 'Titulares (6) · Reservas (2)'), el('small', { class: 'nota' }, 'Arrastra para moverlos')),
     slots,
     el('datalist', { id: 'dl-objetos' }, catalogo.objetos.map(o => el('option', { value: o.nombre }))),

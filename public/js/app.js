@@ -8,6 +8,7 @@ import { el, poner, botonTema, avatarUsuario } from './ui.js';
 import { botonEncima, aplicarEncima, comprobarActualizacion } from './escritorio.js';
 import { vistaBuscar } from './vistas/buscar.js';
 import { vistaObjetos } from './vistas/objetos.js';
+import { vistaMovimientos } from './vistas/movimientos.js';
 import { vistaEquipos } from './vistas/equipos.js';
 import { vistaEditor } from './vistas/editor.js';
 import { vistaShowdown } from './vistas/showdown.js';
@@ -27,6 +28,8 @@ const RUTAS = [
   [/^#\/objetos$/,                    { menu: 'objetos' },                     '',          () => vistaObjetos(vista)],
   [/^#\/objetos\/(\d+)$/,            { menu: 'objetos' },                     '',          id => vistaObjetos(vista, +id)],
   [/^#\/objetos\/anil\/(\w+)$/,       { menu: 'objetos' },                     '',          id => vistaObjetos(vista, null, id)],
+  [/^#\/movimientos$/,                { menu: 'movimientos' },                 '',          () => vistaMovimientos(vista)],
+  [/^#\/movimientos\/(\d+)$/,        { menu: 'movimientos' },                 '',          id => vistaMovimientos(vista, +id)],
   [/^#\/equipos$/,                    { menu: 'equipos' },                     'estrecha',  () => vistaEquipos(vista)],
   [/^#\/editor$/,                     { volver: '#/equipos', texto: '← Mis equipos' }, '',  () => vistaEditor(vista)],
   [/^#\/showdown(?:\/(importar|exportar))?$/, { volver: '#/equipos', texto: '← Mis equipos' }, 'estrecha', modo => vistaShowdown(vista, modo || 'importar')],
@@ -74,6 +77,9 @@ function pintarCabecera(c) {
     el('nav', { class: 'nav' },
       el('a', { href: '#/', class: c.menu === 'buscar' ? 'on' : '' }, 'Buscar'),
       el('a', { href: '#/objetos', class: c.menu === 'objetos' ? 'on' : '' }, 'Objetos'),
+      // En el móvil no cabe la palabra entera
+      el('a', { href: '#/movimientos', class: c.menu === 'movimientos' ? 'on' : '', 'aria-label': 'Movimientos' },
+        el('span', { class: 'largo' }, 'Movimientos'), el('span', { class: 'corto' }, 'Movs.')),
       el('a', { href: '#/equipos', class: c.menu === 'equipos' ? 'on' : '' }, 'Equipos'),
       el('a', { href: '#/amigos', class: c.menu === 'amigos' ? 'on' : '' }, 'Amigos', totalAvisos() > 0 && insignia(totalAvisos()))),
     botonEncima(),

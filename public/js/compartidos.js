@@ -9,7 +9,7 @@ import { guardarCopia, copiar } from './online.js';
 const resumenEquipo = eq => {
   const titulares = eq.miembros.filter(m => m.posicion <= 6).length;
   const reservas = eq.miembros.length - titulares;
-  return `Gen ${eq.generacion} · ${titulares}${reservas ? ` + ${reservas} reserva${reservas > 1 ? 's' : ''}` : ''}`;
+  return `Gen ${eq.generacion} · ${titulares}${reservas ? ` + ${reservas} reserva${reservas > 1 ? 's' : ''}` : ''}${eq.randomlocke ? ' · Randomlocke' : ''}`;
 };
 
 function huecos(eq, tam = 44) {

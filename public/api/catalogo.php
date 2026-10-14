@@ -28,7 +28,7 @@ $datos = [
     'objetos'     => consulta('SELECT id, nombre, nombre_en, identificador, icono, imagen, categoria, descripcion IS NOT NULL AS con_info FROM objeto ORDER BY nombre'),
     'habilidades' => consulta('SELECT id, nombre, nombre_en FROM habilidad ORDER BY nombre'),
     'naturalezas' => consulta('SELECT id, nombre, nombre_en, stat_sube, stat_baja FROM naturaleza ORDER BY nombre'),
-    'movimientos' => consulta('SELECT m.id, m.nombre, m.nombre_en, t.clave AS tipo, m.categoria, m.potencia
+    'movimientos' => consulta('SELECT m.id, m.nombre, m.nombre_en, t.clave AS tipo, m.categoria, m.potencia, m.precision_pct AS `precision`, m.pp
                                  FROM movimiento m JOIN tipo t ON t.id = m.tipo_id ORDER BY m.nombre'),
 
     'google_client_id' => $CONFIG['google_client_id'] ?? '',

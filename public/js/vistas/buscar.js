@@ -321,7 +321,8 @@ function sets(f, gen) {
         ['Teratipo', s.teratipos.map(nombreTipo)],
         ['EVs', s.evs.some(Boolean) ? [s.evs.map((v, i) => (v ? `${v} ${STATS_CORTO[i]}` : '')).filter(Boolean).join(' / ')] : []],
       ],
-      movimientos: s.movimientos.map(alt => nombres(mapas.movimientos, alt).join(' / ')).filter(Boolean),
+      // Cada hueco con sus alternativas ("Terremoto / Roca Afilada"); cada movimiento lleva a su ficha
+      movimientos: s.movimientos.map(alt => alt.map(id => mapas.movimientos.get(id)).filter(Boolean)).filter(alt => alt.length),
     })),
   ];
 }
@@ -330,7 +331,8 @@ function tarjetaSet(s) {
   return el('div', { class: 'set' },
     el('div', { class: 'set-cab' }, el('b', {}, s.nombre), s.formato && el('span', { class: 'etiqueta' }, s.formato)),
     s.filas.filter(([, v]) => v.length).map(([k, v]) => el('div', { class: 'kv' }, el('span', { class: 'lbl' }, k), el('span', {}, v.join(' o ')))),
-    s.movimientos?.length && el('ul', { class: 'movs' }, s.movimientos.map(m => el('li', {}, m))));
+    s.movimientos?.length && el('ul', { class: 'movs' }, s.movimientos.map(alt => el('li', {},
+      alt.map((mv, i) => [i > 0 && ' / ', el('a', { href: `#/movimientos/${mv.id}` }, mv.nombre)])))));
 }
 
 /** ¿Le queda alguna evolución? (para sugerir el Mineral Evolutivo) */

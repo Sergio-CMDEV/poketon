@@ -18,7 +18,7 @@ export function borrador() {
 }
 
 export function equipoVacio() {
-  return { id: null, nombre: '', generacion: genActual(), miembros: [] };
+  return { id: null, nombre: '', generacion: genActual(), randomlocke: false, miembros: [] };
 }
 
 export function guardarBorrador(equipo) {
@@ -41,7 +41,7 @@ export const misEquipos = () => peticion('equipos.php');
 
 /** Guarda en la cuenta (crea o actualiza) y deja el resultado como borrador. */
 export async function guardarEnCuenta(equipo) {
-  const cuerpo = { nombre: equipo.nombre, generacion: equipo.generacion, miembros: equipo.miembros };
+  const cuerpo = { nombre: equipo.nombre, generacion: equipo.generacion, randomlocke: !!equipo.randomlocke, miembros: equipo.miembros };
   const guardado = equipo.id
     ? await peticion(`equipos.php?id=${equipo.id}`, { method: 'PUT', body: cuerpo })
     : await peticion('equipos.php', { method: 'POST', body: cuerpo });

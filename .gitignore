@@ -8,7 +8,7 @@ node_modules/
 dist/
 src-tauri/target/
 src-tauri/gen/
-# Pokémon Añil: datos y sprites del juego, solo para uso personal (los genera scripts/anil.mjs)
+# Pokémon Añil: datos y sprites del juego (los genera scripts/anil.mjs). No van al repo: se copian a mano al servidor
 public/anil/
 # Hoja de iconos de objetos de Pokémon Showdown (la descarga import.php)
 public/img/objetos.png

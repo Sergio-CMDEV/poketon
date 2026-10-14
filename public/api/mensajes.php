@@ -122,7 +122,8 @@ switch (metodo() . ' ' . $accion) {
             // La copia se lee de la BD, no de lo que mande el navegador: así solo se comparten equipos tuyos y válidos
             $eq = array_values(array_filter(listar_equipos($yo), fn($e) => $e['id'] === $d['equipo_id']))[0] ?? null;
             if (!$eq) error_api('Equipo no encontrado', 404);
-            $equipo = json_encode(['nombre' => $eq['nombre'], 'generacion' => $eq['generacion'], 'miembros' => $eq['miembros']], JSON_UNESCAPED_UNICODE);
+            $equipo = json_encode(['nombre' => $eq['nombre'], 'generacion' => $eq['generacion'], 'randomlocke' => $eq['randomlocke'],
+                                   'miembros' => $eq['miembros']], JSON_UNESCAPED_UNICODE);
         } else {
             $texto = texto_limpio((string) ($d['texto'] ?? ''), true);
             if ($texto === '') error_api('El mensaje está vacío');

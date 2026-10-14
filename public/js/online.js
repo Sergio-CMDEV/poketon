@@ -132,6 +132,6 @@ export async function guardarCopia(equipo) {
   const usados = new Set(mios.map(e => e.nombre));
   let nombre = equipo.nombre.slice(0, 40);
   for (let n = 2; usados.has(nombre); n++) nombre = `${equipo.nombre.slice(0, 40 - ` (${n})`.length)} (${n})`;
-  await peticion('equipos.php', { method: 'POST', body: { nombre, generacion: equipo.generacion, miembros: equipo.miembros } });
+  await peticion('equipos.php', { method: 'POST', body: { nombre, generacion: equipo.generacion, randomlocke: !!equipo.randomlocke, miembros: equipo.miembros } });
   aviso(`Guardado en tus equipos como "${nombre}"`);
 }

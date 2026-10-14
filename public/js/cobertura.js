@@ -1,18 +1,62 @@
 // Tabla de cobertura defensiva de un equipo: qué le pega cada tipo atacante a cada miembro,
 // con el total de débiles y de resistentes por tipo. Se usa en "Mis equipos" y en el editor.
+// Cuenta también la habilidad de cada miembro si cambia lo que le hacen los tipos (Levitación, Absorbe agua…).
 
-import { tablaTipos, multiplicador } from './datos.js';
+import { tablaTipos, multiplicador, mapas } from './datos.js';
 import { el, chip } from './ui.js';
 import { datosMiembro } from './miembro.js';
 
-const TEXTO = { 4: '×4', 2: '×2', 0.5: '½', 0.25: '¼' };
+const TEXTO = { 8: '×8', 4: '×4', 2: '×2', 0.5: '½', 0.25: '¼', 0.125: '⅛' };
+
+/*
+ * Habilidades que cambian lo que le hace un tipo al Pokémon (por su nombre en inglés, el de PokeAPI y Showdown).
+ * desde: generación en la que la habilidad empezó a dar la inmunidad (Pararrayos y Colector antes solo atraían
+ * los ataques). Solo cuenta lo que vale siempre; lo que depende del combate (Filtro, Caparazón Tera…) no.
+ */
+const HABILIDADES = {
+  'levitate': { GROUND: 0 },                                 // Levitación
+  'earth eater': { GROUND: 0 },                              // Geofagia
+  'flash fire': { FIRE: 0 },                                 // Absorbe fuego
+  'well-baked body': { FIRE: 0 },                            // Cuerpo horneado
+  'water absorb': { WATER: 0 },                              // Absorbe agua
+  'dry skin': { WATER: 0 },                                  // Piel seca
+  'storm drain': { WATER: 0, desde: 5 },                     // Colector
+  'volt absorb': { ELECTRIC: 0 },                            // Absorbe electricidad
+  'motor drive': { ELECTRIC: 0 },                            // Electromotor
+  'lightning rod': { ELECTRIC: 0, desde: 5 },                // Pararrayos
+  'sap sipper': { GRASS: 0 },                                // Herbívoro
+  'primordial sea': { FIRE: 0 },                             // Mar del albor: los ataques de fuego fallan
+  'desolate land': { WATER: 0 },                             // Tierra del ocaso: los de agua fallan
+  'thick fat': { FIRE: 0.5, ICE: 0.5 },                      // Sebo
+  'heatproof': { FIRE: 0.5 },                                // Ignífugo
+  'water bubble': { FIRE: 0.5 },                             // Pompa
+  'purifying salt': { GHOST: 0.5 },                          // Sal purificadora
+  'fluffy': { FIRE: 2 },                                     // Peluche
+  'wonder guard': { soloEficaces: true },                    // Superguarda: solo le dan los supereficaces
+  'mountaineer': { ROCK: 0 },                                // No oficial (CAP, fangames): inmune a los de tipo Roca
+};
+
+/** Lo que cambia la habilidad del miembro, o null. Antes de la 3.ª generación no había habilidades. */
+function efectoHabilidad(habilidadId, gen) {
+  if (!habilidadId || !(gen >= 3)) return null;
+  const h = mapas.habilidades?.get(habilidadId);
+  const efecto = h && HABILIDADES[String(h.nombre_en ?? '').toLowerCase()];
+  return efecto && gen >= (efecto.desde ?? 3) ? { nombre: h.nombre, ...efecto } : null;
+}
+
+/** Multiplicador contando la habilidad. */
+function conHabilidad(m, tipo, hab) {
+  if (!hab) return m;
+  if (hab.soloEficaces) return m > 1 ? m : 0;
+  return tipo in hab ? m * hab[tipo] : m;
+}
 
 /** miembros: titulares [{ pokemon_id, anil_id?, shiny }]. Devuelve la tabla y la frase del punto débil. */
 export function tablaCobertura(miembros, gen) {
   const tabla = tablaTipos(gen);
   // Columnas en el orden de los huecos (al mover un Pokémon de sitio cambia su posición, no su lugar en la lista)
   const equipo = miembros.slice().sort((a, b) => (a.posicion ?? 0) - (b.posicion ?? 0))
-    .map(m => datosMiembro(m, gen)).filter(x => x.tipos.length);
+    .map(m => ({ ...datosMiembro(m, gen), hab: efectoHabilidad(m.habilidad_id, gen) })).filter(x => x.tipos.length);
   if (!equipo.length) return [el('p', { class: 'nota' }, 'Añade Pokémon para ver la cobertura del equipo.')];
 
   const rejilla = el('div', { class: 'cobertura', style: { gridTemplateColumns: `70px repeat(${equipo.length}, minmax(0, 1fr)) 44px 44px` } });
@@ -23,15 +67,22 @@ export function tablaCobertura(miembros, gen) {
   rejilla.append(el('span', { class: 'cab t-mal' }, 'Débil'), el('span', { class: 'cab t-bien' }, 'Resiste'));
 
   let peor = { n: 0, tipo: '' };
+  const porHabilidad = new Set();   // miembros a los que la habilidad les cambia alguna casilla (para la nota)
   for (const t of tabla.tipos) {
     let debiles = 0, resisten = 0;
     rejilla.append(el('span', { class: 'fila-tipo' }, chip(t.clave)));
     for (const x of equipo) {
-      const m = multiplicador(tabla, t.clave, x.tipos);
+      const sinHab = multiplicador(tabla, t.clave, x.tipos);
+      const m = conHabilidad(sinHab, t.clave, x.hab);
       if (m > 1) debiles++;
       if (m < 1) resisten++;
-      if (m === 0) rejilla.append(el('span', { class: 'celda inmune' }, 'Inmune'));
-      else rejilla.append(el('span', { class: `celda ${m >= 4 ? 'muy-mal' : m > 1 ? 'mal' : m < 1 ? 'bien' : ''}` }, TEXTO[m] ?? ''));
+      // Si la casilla cambia por la habilidad lleva un * y, al pasar el ratón, por qué
+      const cambia = m !== sinHab;
+      if (cambia) porHabilidad.add(x);
+      const extra = cambia ? { title: `${x.nombre}: ${TEXTO[sinHab] ?? (sinHab === 0 ? 'inmune' : 'neutro')} por tipos; con ${x.hab.nombre}, ${m === 0 ? 'inmune' : TEXTO[m] ?? 'neutro'}` } : {};
+      const marca = cambia ? '*' : '';
+      if (m === 0) rejilla.append(el('span', { class: 'celda inmune', ...extra }, 'Inmune' + marca));
+      else rejilla.append(el('span', { class: `celda ${m >= 4 ? 'muy-mal' : m > 1 ? 'mal' : m < 1 ? 'bien' : ''}`, ...extra }, (TEXTO[m] ?? '') + marca));
     }
     rejilla.append(
       el('span', { class: `total ${debiles >= 3 ? 'mal3' : debiles === 2 ? 'mal2' : ''}` }, debiles || ''),
@@ -43,5 +94,7 @@ export function tablaCobertura(miembros, gen) {
   return [
     el('div', { class: 'scroll-x' }, rejilla),
     peor.n >= 2 ? el('span', { class: 'nota', style: { padding: '0 4px', fontSize: '12px' } }, `Punto débil: ${peor.n} del equipo son débiles a ${peor.tipo}.`) : null,
+    porHabilidad.size ? el('span', { class: 'nota', style: { padding: '0 4px', fontSize: '12px' } },
+      `* Contando la habilidad: ${equipo.filter(x => porHabilidad.has(x)).map(x => `${x.nombre} (${x.hab.nombre})`).join(', ')}.`) : null,
   ];
 }

@@ -230,6 +230,7 @@ CREATE TABLE equipo (
   usuario_id      INT UNSIGNED NOT NULL,
   nombre          VARCHAR(40) NOT NULL,
   generacion      TINYINT UNSIGNED NOT NULL DEFAULT 9,
+  randomlocke     TINYINT(1) NOT NULL DEFAULT 0,     -- deja poner cualquier habilidad y movimiento
   creado_en       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   actualizado_en  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE (usuario_id, nombre),                     -- no repetir nombre dentro de un usuario

@@ -21,6 +21,7 @@
   --borde-peligro: #e3b4b9; --borrar: #6b2a2f;
   --linea-tabla: #e3e8ee; --inmune-bg: #6b7484;
   --mal: #c8323d; --muy-mal: #b4232f;
+  --cat-fisico: #c4492b; --cat-especial: #3566c8;
   --mal2-bg: #f6d2d5; --mal2-ink: #8f1a24; --bien3: #1f7a45; --bien2-bg: #d3eedd; --bien2-ink: #1d5e36;
   --ilegal-bg: #fff8e6; --ilegal: #b07a00; --amistad: #d1477a;
   --s1: #f2563b; --s2: #ff8a1f; --s3: #e8c13a; --s4: #8ccf2a; --s5: #2bbf90;
@@ -40,6 +41,7 @@
   --borde-peligro: #6b2a33; --borrar: #ff9aa1;
   --linea-tabla: #262e3a; --inmune-bg: #4a5566;
   --mal: #ff6b74; --muy-mal: #ff8f96;
+  --cat-fisico: #ff8a66; --cat-especial: #84a8ff;
   --mal2-bg: #4a1f24; --mal2-ink: #ffb3b8; --bien3: #2f9a5c; --bien2-bg: #173524; --bien2-ink: #9be3b6;
   --ilegal-bg: #3a2f12; --ilegal: #d9a520; --amistad: #ff7aa8;
 }
@@ -301,6 +303,7 @@ a.metodo:hover { border-color: var(--accent); color: var(--fg); }
 /* ---------- Editor ---------- */
 .nombre-gen { display: grid; grid-template-columns: minmax(0, 1fr) 130px; gap: 8px; }
 .nombre-gen input, .nombre-gen select { padding: 9px 10px; border-color: var(--field); }
+.randomlocke { padding: 10px 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
 .slots { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 .slot { font: inherit; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px; border-radius: 10px;
   background: var(--panel); border: 1px solid var(--line); color: var(--fg); cursor: pointer; min-width: 0; }
@@ -387,12 +390,40 @@ details.ivs .seis { margin-top: 6px; }
 .texto-legal { display: flex; flex-direction: column; gap: 8px; font-size: 14px; }
 .texto-legal p { margin: 0; }
 
-/* ---------- Móviles: con 4 secciones el menú no cabe en una línea; pasa a una segunda fila ---------- */
-@media (max-width: 559px) {
+/* ---------- Movimientos ---------- */
+.nav .corto { display: none; }
+.filtro-movs { display: grid; grid-template-columns: minmax(0, 1fr) 130px 120px; gap: 8px; }
+.filtro-movs input, .filtro-movs select { padding: 9px 10px; }
+.fila-mov .chip { min-width: 70px; text-align: center; }
+.fila-mov .datos { min-width: 118px; text-align: right; white-space: nowrap; }
+.etiqueta.cat-fisico { color: var(--cat-fisico); border-color: var(--cat-fisico); }
+.etiqueta.cat-especial { color: var(--cat-especial); border-color: var(--cat-especial); }
+.datos-mov { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); text-align: center; }
+.datos-mov > div { display: flex; flex-direction: column; gap: 2px; }
+.datos-mov b { font-size: 20px; }
+.grupo-aprende { margin-top: 6px; font-weight: 700; color: var(--muted); }
+.aprenden { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 2px 6px; }
+.aprende { display: flex; align-items: center; gap: 6px; padding: 2px 6px; border-radius: 8px; color: var(--fg); text-decoration: none; font-size: 13px; }
+.aprende:hover { background: var(--bg); color: var(--fg); }
+.aprende span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aprenden .btn-sec-mini { grid-column: 1 / -1; justify-self: start; min-height: 34px; margin-top: 4px; }
+
+/* ---------- Pantallas medianas y móviles: con 5 secciones el menú no cabe en una línea; pasa a una segunda fila ---------- */
+@media (max-width: 679px) {
   .cabecera { flex-wrap: wrap; row-gap: 10px; padding-bottom: 8px; }
-  .cabecera .nav { order: 3; width: 100%; margin-left: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .cabecera .nav { order: 3; width: 100%; margin-left: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); }
   .cabecera .nav a { text-align: center; padding: 8px 4px; white-space: nowrap; }
   .cabecera .nav ~ .tema { margin-left: auto; }
+}
+@media (max-width: 459px) {
+  .nav .largo { display: none; }
+  .nav .corto { display: inline; }
+}
+@media (max-width: 559px) {
+  .filtro-movs { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .filtro-movs > :first-child { grid-column: 1 / -1; }
+  .fila-mov { flex-wrap: wrap; row-gap: 2px; }
+  .fila-mov .datos { order: 5; width: 100%; min-width: 0; padding-left: 80px; text-align: left; }
 }
 
 /* ---------- Pantallas anchas (navegador de PC, ventana del .exe estirada) ----------

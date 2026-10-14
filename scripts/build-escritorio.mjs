@@ -2,7 +2,7 @@
 // La app de escritorio llama a la API publicada (API_PUBLICADA en public/js/api.js).
 // Para probar el .exe contra otra API (p. ej. el php -S de tu PC), compila con la variable POKETON_API:
 //   PowerShell:  $env:POKETON_API = "http://localhost:8000/api"; npm run build
-// No se copia public/anil/: son datos del juego Pokémon Añil, solo para uso personal.
+// No se copia public/anil/: la app pide los datos y sprites de Pokémon Añil al servidor (así el .exe pesa poco).
 // Ni public/fotos/: son las fotos de perfil subidas al servidor (la app las pide al servidor).
 import { rm, cp, readFile, writeFile } from 'node:fs/promises';
 

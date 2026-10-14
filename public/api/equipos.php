@@ -2,7 +2,7 @@
 /**
  * Equipos del usuario (requiere sesión).
  *   GET    /api/equipos.php          → lista de sus equipos con sus miembros
- *   POST   /api/equipos.php          → crea un equipo       {nombre?, generacion, miembros: [...]}
+ *   POST   /api/equipos.php          → crea un equipo       {nombre?, generacion, randomlocke?, miembros: [...]}
  *   PUT    /api/equipos.php?id=3     → reemplaza un equipo  (mismo formato)
  *   DELETE /api/equipos.php?id=3     → borra un equipo
  *
@@ -104,6 +104,8 @@ switch (metodo()) {
         $miembros = miembros_validos($d['miembros'] ?? null);
         $gen = filter_var($d['generacion'] ?? 9, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 9]]) ?: 9;
         $nombre = mb_substr(texto_limpio((string) ($d['nombre'] ?? '')), 0, 40);
+        // Randomlocke: si no llega (p. ej. al equipar un objeto desde Objetos), se queda como estaba
+        $random = array_key_exists('randomlocke', $d) ? (empty($d['randomlocke']) ? 0 : 1) : null;
         if (metodo() === 'PUT') $id = equipo_propio($id ?: null, $usuario);
         elseif (consulta('SELECT COUNT(*) n FROM equipo WHERE usuario_id = ?', [$usuario])[0]['n'] >= MAX_EQUIPOS) {
             error_api('Has llegado al máximo de ' . MAX_EQUIPOS . ' equipos. Borra uno para guardar este', 409);
@@ -116,10 +118,11 @@ switch (metodo()) {
         try {
             if (metodo() === 'PUT') {
                 // actualizado_en a mano: si solo cambian los miembros, la fila de equipo no cambia y no se actualizaría sola
-                consulta('UPDATE equipo SET nombre = ?, generacion = ?, actualizado_en = NOW() WHERE id = ?', [$nombre, $gen, $id]);
+                consulta('UPDATE equipo SET nombre = ?, generacion = ?, randomlocke = COALESCE(?, randomlocke), actualizado_en = NOW() WHERE id = ?',
+                         [$nombre, $gen, $random, $id]);
                 consulta('DELETE FROM miembro_equipo WHERE equipo_id = ?', [$id]);   // sus movimientos caen en cascada
             } else {
-                consulta('INSERT INTO equipo (usuario_id, nombre, generacion) VALUES (?, ?, ?)', [$usuario, $nombre, $gen]);
+                consulta('INSERT INTO equipo (usuario_id, nombre, generacion, randomlocke) VALUES (?, ?, ?, ?)', [$usuario, $nombre, $gen, $random ?? 0]);
                 $id = (int) db()->lastInsertId();
             }
             guardar_miembros($id, $miembros);

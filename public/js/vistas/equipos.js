@@ -61,7 +61,7 @@ function tarjetaEquipo(eq, raiz, conCuenta) {
 
   return el('article', { class: 'equipo' },
     el('div', { class: 'equipo-cab' }, el('b', {}, eq.nombre),
-      el('span', {}, `Gen ${eq.generacion} · ${titulares.length}${reservas ? ` + ${reservas} reserva${reservas > 1 ? 's' : ''}` : ''}`)),
+      el('span', {}, `Gen ${eq.generacion} · ${titulares.length}${reservas ? ` + ${reservas} reserva${reservas > 1 ? 's' : ''}` : ''}${eq.randomlocke ? ' · Randomlocke' : ''}`)),
     el('div', { class: 'huecos' }, huecos),
     el('div', { class: 'acciones-texto' },
       el('button', { class: 'enlace', onclick: abrir('#/editor') }, 'Editar'),

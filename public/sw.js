@@ -4,7 +4,7 @@
 // nada de la cuenta (equipos, amigos, mensajes) ni las fotos de perfil.
 const CACHE = 'poketon-v1';
 const BASICOS = ['./', 'index.html', 'css/styles.css', 'js/app.js', 'js/tema.js', 'icono.svg', 'manifest.webmanifest'];
-const API_PUBLICA = /\/api\/(catalogo|pokemon|objeto)\.php/;
+const API_PUBLICA = /\/api\/(catalogo|pokemon|objeto|movimiento)\.php/;
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(BASICOS)).then(() => self.skipWaiting()));

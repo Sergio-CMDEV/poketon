@@ -1,4 +1,4 @@
-// Pokémon Añil (fangame) en Poketon. Solo para uso personal: public/anil/ está en .gitignore.
+// Pokémon Añil (fangame) en Poketon. public/anil/ no va a GitHub (.gitignore): se copia a mano al servidor (ver Despliegue).
 //
 // Uso:  node scripts/anil.mjs "C:\Users\Sergio\Downloads\Pokemon Anil V4.13"
 //

@@ -7,7 +7,7 @@ declare(strict_types=1);
 /** Todos los equipos del usuario con sus miembros. */
 function listar_equipos(int $usuario): array
 {
-    $equipos = consulta('SELECT id, nombre, generacion, actualizado_en FROM equipo WHERE usuario_id = ? ORDER BY actualizado_en DESC', [$usuario]);
+    $equipos = consulta('SELECT id, nombre, generacion, randomlocke, actualizado_en FROM equipo WHERE usuario_id = ? ORDER BY actualizado_en DESC', [$usuario]);
     if (!$equipos) return [];
     $miembros = consulta(
         'SELECT m.*, (SELECT GROUP_CONCAT(mm.movimiento_id ORDER BY mm.slot) FROM miembro_movimiento mm WHERE mm.miembro_id = m.id) AS movs
@@ -30,7 +30,7 @@ function listar_equipos(int $usuario): array
         ];
     }
     return array_map(fn($e) => [
-        'id' => (int) $e['id'], 'nombre' => $e['nombre'], 'generacion' => (int) $e['generacion'],
+        'id' => (int) $e['id'], 'nombre' => $e['nombre'], 'generacion' => (int) $e['generacion'], 'randomlocke' => (bool) $e['randomlocke'],
         'actualizado_en' => $e['actualizado_en'], 'miembros' => $porEquipo[$e['id']] ?? [],
     ], $equipos);
 }
