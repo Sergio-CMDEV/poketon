@@ -1,6 +1,6 @@
 [package]
 name = "poketon"
-version = "1.0.1"
+version = "1.0.2"
 description = "Poketon: debilidades, stats, evoluciones y equipos Pokémon"
 authors = ["Sergio Carrascosa Medina"]
 edition = "2021"

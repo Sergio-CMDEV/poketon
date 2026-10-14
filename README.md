@@ -1,4 +1,7 @@
 # Poketon
+Esta app está creada por pura necesidad: soy un jugador muy nuevo de Pokémon y siempre me ha costado una barbaridad
+aprender todos los tipos y cómo se afectan entre ellos. Como ninguna guía me resultaba cómoda, creé esto, tanto para
+aprender y practicar las tecnologías que estoy estudiando como para jugar más cómodo a los juegos de Pokémon.
 
 Web y app de escritorio para consultar Pokémon y montar equipos:
 
@@ -57,39 +60,6 @@ docker/               Nginx y PHP para el despliegue
 src-tauri/            app de escritorio
 ```
 
-## Puesta en marcha (desarrollo)
-
-1. Copia `config.example.php` como `config.php` y rellénalo.
-2. Crea la base de datos y cárgala:
-   ```bash
-   mariadb -h IP -u USUARIO -p tablatipos_dev < db/schema.sql
-   php db/import.php
-   ```
-3. Arranca el servidor de desarrollo y abre http://localhost:8000:
-   ```bash
-   php -S localhost:8000 -t public
-   ```
-
-## Despliegue
-
-En la máquina de webs (la BD está en su propia máquina; `config.php` apunta a su IP):
-```bash
-docker compose up -d --build
-```
-La web queda en el puerto 8080; ponla detrás de tu proxy con HTTPS. Antes del primer arranque, crea la carpeta de las fotos de perfil con permiso para PHP:
-```bash
-mkdir -p public/fotos && chown 82:82 public/fotos
-```
-
-## App de escritorio
-
-Requiere [Rust](https://rustup.rs) y las Build Tools de Visual Studio con C++.
-```bash
-npm install
-npm run build
-```
-El .exe queda en `src-tauri/target/release/`. Llama a la API publicada (constante `API_PUBLICADA` en `public/js/api.js`).
-
 ## Licencia
 
 El código es de licencia **MIT** (ver [LICENSE](LICENSE)). La licencia cubre solo el código de Poketon, no los datos ni las imágenes de Pokémon.
@@ -100,3 +70,7 @@ Proyecto fan no oficial, sin ánimo de lucro. Pokémon y sus nombres e imágenes
 - Datos y sprites: [PokeAPI](https://pokeapi.co).
 - Sets competitivos: [Smogon](https://www.smogon.com).
 - Iconos de objetos: [Pokémon Showdown](https://pokemonshowdown.com) y [PokéSprite](https://github.com/msikma/pokesprite).
+
+## Discleimer
+Esta app está hecha en un 80 % por IA con mi supervisión. Iré actualizándola para cambiar el código por mi propio
+código y así ir aprendiendo poco a poco. Si quieres ayudar o explicarme lo que sea comentamelo ^^
