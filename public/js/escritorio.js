@@ -2,6 +2,7 @@
 // window.__TAURI__ existe porque tauri.conf.json tiene "withGlobalTauri": true.
 
 import { el, aviso } from './ui.js';
+import { VERSION } from './version.js';
 
 const tauri = () => window.__TAURI__;
 
@@ -35,16 +36,32 @@ export function botonEncima() {
     } }, svg);
 }
 
-/* ---------- Actualización automática ---------- */
+/* ---------- Versión y actualización automática ---------- */
 // Al abrir, pregunta a GitHub Releases si hay versión nueva (tauri-plugin-updater, ver tauri.conf.json).
 // Si la hay, sale un aviso con "Actualizar": descarga el instalador firmado, Windows cierra la app y lo instala.
+// En "Mi cuenta" y en "Iniciar sesión" se ve la versión y, en la app, un botón para buscar a mano (dice qué pasa).
 
-export async function comprobarActualizacion() {
+/** Versión de verdad de la app instalada (la del .exe); en la web, la de version.js. */
+export async function versionApp() {
+  try { return (await tauri()?.app?.getVersion()) || VERSION; } catch { return VERSION; }
+}
+
+/**
+ * Pregunta si hay versión nueva. Al abrir la app (manual = false) no dice nada si no la hay o si falla;
+ * con el botón (manual = true) avisa siempre: "ya tienes la última", o el error.
+ */
+export async function comprobarActualizacion(manual = false) {
   const updater = tauri()?.updater;
-  if (!updater) return;
+  if (!updater) { if (manual) aviso('Esta versión de la app no puede buscar actualizaciones', 'error'); return; }
   let nueva;
-  try { nueva = await updater.check(); } catch { return; }   // sin internet o sin versiones publicadas: nada
-  if (!nueva) return;
+  try { nueva = await updater.check(); }
+  catch (e) {
+    console.error('Actualización:', e);
+    if (manual) aviso(`No se pudo comprobar: ${e?.message ?? e}`, 'error');
+    return;
+  }
+  if (!nueva) { if (manual) aviso(`Ya tienes la última versión (${await versionApp()})`); return; }
+  document.querySelector('.actualizacion')?.remove();   // no dos avisos
   const boton = el('button', { class: 'btn mini', type: 'button', onclick: async () => {
     boton.disabled = true;
     let total = 0, bajado = 0;
@@ -59,4 +76,16 @@ export async function comprobarActualizacion() {
   document.body.append(el('div', { class: 'actualizacion', role: 'status' },
     el('span', {}, `Poketon ${nueva.version} disponible`), boton,
     el('button', { class: 'cerrar', type: 'button', 'aria-label': 'Más tarde', onclick: e => e.currentTarget.parentElement.remove() }, '×')));
+}
+
+/** "Poketon 1.0.1 · App de escritorio [Buscar actualizaciones]" (en la web, solo el texto). */
+export function infoVersion() {
+  const texto = el('span', {}, `Poketon ${VERSION}${tauri() ? ' · App de escritorio' : ''}`);
+  versionApp().then(v => { texto.textContent = `Poketon ${v}${tauri() ? ' · App de escritorio' : ''}`; });
+  return el('p', { class: 'version-app' }, texto,
+    tauri()?.updater && el('button', { class: 'enlace-btn', type: 'button', onclick: async e => {
+      const b = e.currentTarget;
+      b.disabled = true; b.textContent = 'Buscando…';
+      try { await comprobarActualizacion(true); } finally { b.disabled = false; b.textContent = 'Buscar actualizaciones'; }
+    } }, 'Buscar actualizaciones'));
 }

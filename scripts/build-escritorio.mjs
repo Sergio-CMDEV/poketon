@@ -6,6 +6,14 @@
 // Ni public/fotos/: son las fotos de perfil subidas al servidor (la app las pide al servidor).
 import { rm, cp, readFile, writeFile } from 'node:fs/promises';
 
+// La versión que se ve en la app (public/js/version.js) tiene que ser la del instalador (tauri.conf.json)
+const conf = JSON.parse(await readFile('src-tauri/tauri.conf.json', 'utf8'));
+const visible = (await readFile('public/js/version.js', 'utf8')).match(/VERSION = '([^']+)'/)?.[1];
+if (visible !== conf.version) {
+  console.error(`La versión de public/js/version.js (${visible}) no es la de src-tauri/tauri.conf.json (${conf.version}). Pon la misma en los dos.`);
+  process.exit(1);
+}
+
 await rm('dist', { recursive: true, force: true });
 await cp('public', 'dist', { recursive: true, filter: ruta => !/[\\/](api|anil|fotos)([\\/]|$)/.test(ruta) });
 

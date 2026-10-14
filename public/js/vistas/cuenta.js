@@ -7,6 +7,7 @@ import { el, campoForm, aviso, poner, iconoGoogle, avatarUsuario, confirmar, spr
 import { formatoCodigo } from '../online.js';
 import { recortarFoto, TIPOS_FOTO } from '../recorte.js';
 import { subirBorradorPendiente, borrador, misEquipos, guardarBorrador, equipoVacio } from '../equipos.js';
+import { infoVersion } from '../escritorio.js';
 
 /** Tras entrar: guarda la sesión, sube el equipo pendiente y va a "Mis equipos". */
 async function entrar(datos) {
@@ -141,6 +142,7 @@ export function vistaLogin(raiz) {
       el('a', { href: '#/recuperar', class: 'enlace-derecha' }, '¿Has olvidado la contraseña?'),
     ], 'Entrar', async d => entrar(await peticion('auth.php?accion=login', { method: 'POST', body: d }))),
     el('p', { class: 'centro' }, '¿No tienes cuenta? ', el('a', { href: '#/registro' }, 'Regístrate')),
+    infoVersion(),
   );
 }
 
@@ -304,6 +306,7 @@ export async function vistaCuenta(raiz) {
         aviso('Cuenta eliminada');
         salir();
       }, { peligro: true })),
+    infoVersion(),
   );
 }
 

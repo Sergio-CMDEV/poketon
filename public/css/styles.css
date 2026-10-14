@@ -303,6 +303,8 @@ a.metodo:hover { border-color: var(--accent); color: var(--fg); }
 /* ---------- Editor ---------- */
 .nombre-gen { display: grid; grid-template-columns: minmax(0, 1fr) 130px; gap: 8px; }
 .nombre-gen input, .nombre-gen select { padding: 9px 10px; border-color: var(--field); }
+.version-app { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 4px 10px; margin: 4px 0 0; font-size: 12px; color: var(--muted); }
+.version-app .enlace-btn { font-size: 12px; }
 .randomlocke { padding: 10px 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
 .slots { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 .slot { font: inherit; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px; border-radius: 10px;
