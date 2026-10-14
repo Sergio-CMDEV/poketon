@@ -3,7 +3,7 @@
  * Cuentas de usuario. La acción va en ?accion=
  *   POST registro         {nombre, email, password, privacidad: "si"} → {token, usuario}
  *   POST login            {email, password}               → {token, usuario}
- *   POST google           {credential}                    → {token, usuario}
+ *   POST google           {access_token} (o {credential})  → {token, usuario}
  *   POST vincular-google  {credential}                    → usuario (con sesión iniciada)
  *   GET  yo                                               → usuario de la sesión
  *   POST cambiar-password {actual, nueva}                → {token}: la sesión nueva (las demás se cierran)
@@ -73,11 +73,20 @@ function verificar_google(array $d): array
 {
     global $CONFIG;
     if (empty($CONFIG['google_client_id'])) error_api('El inicio con Google no está configurado', 501);
-    $consulta = !empty($d['access_token']) ? 'access_token=' . urlencode((string) $d['access_token'])
-                                           : 'id_token=' . urlencode((string) ($d['credential'] ?? ''));
+    $token = (string) ($d['access_token'] ?? '');
+    // Un token de Google solo lleva estos caracteres (y así no se puede colar nada en la cabecera de abajo)
+    if ($token !== '' && !preg_match('#^[\w.~+/=-]{20,4096}$#', $token)) error_api('No se pudo verificar la cuenta de Google', 401);
+    $consulta = $token !== '' ? 'access_token=' . urlencode($token) : 'id_token=' . urlencode((string) ($d['credential'] ?? ''));
     $info = json_decode(@file_get_contents('https://oauth2.googleapis.com/tokeninfo?' . $consulta) ?: 'null', true);
+    // aud: el token tiene que ser para Poketon (si no, valdría uno sacado por cualquier otra web)
     if (!$info || ($info['aud'] ?? '') !== $CONFIG['google_client_id'] || ($info['email_verified'] ?? '') !== 'true' || empty($info['sub'])) {
         error_api('No se pudo verificar la cuenta de Google', 401);
+    }
+    // Con access_token, el nombre no viene en tokeninfo: se pide a userinfo (con el permiso "profile")
+    if ($token !== '') {
+        $contexto = stream_context_create(['http' => ['header' => "Authorization: Bearer $token\r\n", 'timeout' => 10]]);
+        $perfil = json_decode(@file_get_contents('https://openidconnect.googleapis.com/v1/userinfo', false, $contexto) ?: 'null', true);
+        if (is_array($perfil) && ($perfil['sub'] ?? '') === $info['sub']) $info += array_intersect_key($perfil, array_flip(['name', 'given_name']));
     }
     return $info;
 }

@@ -65,17 +65,35 @@ const cargarGis = () => (gis ??= new Promise((ok, fallo) => {
     onerror: () => { gis = null; fallo(new Error('No se pudo cargar Google')); } }));
 }));
 
-/** Botón oficial de Google (en la web y si está configurado). alRecibir recibe el credential. */
-function botonGoogle(alRecibir, texto = 'continue_with') {
+/**
+ * Botón "Continuar con Google" con el diseño de la app (en la web y si está configurado). Al pulsarlo se abre la
+ * ventana de Google (cliente de tokens de Google Identity Services) y alRecibir recibe { access_token }; el servidor
+ * lo comprueba con Google. El cliente se prepara al pintar el botón: si se creara al pulsar, el navegador
+ * bloquearía la ventana emergente.
+ */
+function botonGoogle(alRecibir, texto) {
   if (!googleDisponible()) return null;
-  const caja = el('div', { class: 'google' });
-  cargarGis().then(() => {
-    google.accounts.id.initialize({ client_id: catalogo.google_client_id, callback: async r => {
-      try { await alRecibir(r.credential); } catch (e) { aviso(e.message, 'error'); }
-    } });
-    google.accounts.id.renderButton(caja, { theme: 'outline', size: 'large', text: texto, locale: 'es', width: 300 });
-  }, e => poner(caja, el('p', { class: 'msg error' }, e.message)));
-  return caja;
+  let cliente = null, fallo = false;
+  const boton = el('button', { class: 'google', type: 'button', onclick: () => {
+    if (cliente) cliente.requestAccessToken();
+    else if (fallo) { aviso('No se pudo cargar Google. Si usas un bloqueador, desactívalo para esta web y vuelve a intentarlo', 'error'); preparar(); }
+    else aviso('Cargando Google… vuelve a pulsar en un momento');
+  } }, iconoGoogle(), texto);
+  const preparar = () => cargarGis().then(() => {
+    fallo = false;
+    cliente = google.accounts.oauth2.initTokenClient({
+      client_id: catalogo.google_client_id, scope: 'openid email profile',
+      callback: async r => {
+        if (r.error) { if (r.error !== 'popup_closed') aviso('No se pudo entrar con Google', 'error'); return; }
+        boton.disabled = true;
+        try { await alRecibir({ access_token: r.access_token }); } catch (e) { aviso(e.message, 'error'); }
+        finally { boton.disabled = false; }
+      },
+      error_callback: e => { if (e?.type !== 'popup_closed') aviso('No se pudo abrir la ventana de Google', 'error'); },
+    });
+  }, () => { fallo = true; });   // sin aviso al abrir: solo si se pulsa el botón
+  preparar();
+  return boton;
 }
 
 /*
@@ -123,8 +141,7 @@ function entrarConGoogle(texto) {
     return [el('button', { class: 'google', type: 'button', disabled: true, title: 'Falta configurar google_client_id en config.php' },
       iconoGoogle(), texto), separador];
   }
-  const b = botonGoogle(async credential => entrar(await peticion('auth.php?accion=google', { method: 'POST', body: { credential } })),
-    texto.startsWith('Registrarse') ? 'signup_with' : 'continue_with');
+  const b = botonGoogle(async token => entrar(await peticion('auth.php?accion=google', { method: 'POST', body: token })), texto);
   return [b, separador];
 }
 

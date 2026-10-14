@@ -125,7 +125,8 @@ form { display: flex; flex-direction: column; gap: 14px; margin: 0; }
 .google { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 46px; border: 1px solid var(--field); border-radius: 10px; background: var(--panel);
   font: inherit; font-weight: 600; color: var(--fg); }
 button.google:disabled { cursor: not-allowed; }
-div.google { border: 0; background: none; }   /* el botón oficial de Google ya trae su borde */
+button.google:not(:disabled) { cursor: pointer; }
+button.google:not(:disabled):hover { border-color: var(--muted); }
 .separador { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 13px; }
 .separador::before, .separador::after { content: ""; flex: 1; height: 1px; background: var(--line); }
 
