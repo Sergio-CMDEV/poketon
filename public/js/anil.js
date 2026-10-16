@@ -5,7 +5,7 @@ import { catalogo, normalizar } from './datos.js';
 import { usarIconosLocales } from './ui.js';
 import { API, WEB, esEscritorio } from './api.js';
 
-export let anil = null;   // { tipos, pokemon, habilidades, cadenas, objetos, porId, objetoPorId }
+export let anil = null;   // { tipos, pokemon, habilidades, cadenas, objetos, porId, porOficial, objetoPorId }
 
 export async function cargarAnil() {
   try {
@@ -20,6 +20,9 @@ export async function cargarAnil() {
     p.clave = normalizar(p.nombre + ' ' + (p.forma || ''));
     p.oficial = oficial(p);   // id del mismo Pokémon en la BD (para equipos y sets), o null
   }
+  // Del Pokémon de la BD a su versión en Añil (para el super shiny en los equipos). Si hay varias, la que no es forma.
+  anil.porOficial = new Map();
+  for (const p of anil.pokemon) if (p.oficial && (!anil.porOficial.has(p.oficial) || !p.forma)) anil.porOficial.set(p.oficial, p);
   // Objetos: el mismo objeto de los juegos oficiales (por su nombre en español), si existe.
   // Sirve para saber su categoría, los sets de Smogon que lo usan y para poder equiparlo en un equipo.
   anil.objetos ??= [];
@@ -50,6 +53,9 @@ export function usosObjetoAnil(o) {
 export const enAnil = () => !!anil && localStorage.getItem('gen') === 'anil';
 
 export const pokemonAnil = id => anil?.porId.get(id) ?? null;
+
+/** El mismo Pokémon de la BD en Añil (null si no está o no hay datos de Añil). */
+export const anilDeOficial = id => anil?.porOficial?.get(id) ?? null;
 
 export const nombreAnil = p => (p.forma ? `${p.nombre} (${p.forma})` : p.nombre);
 
@@ -100,7 +106,7 @@ export function buscarAnil(texto, limite = 8) {
 /** Habilidades con nombre y descripción, como las de la API. */
 export const habilidadesAnil = p => p.habilidades.map(([id, oculta]) => {
   const [nombre, descripcion] = anil.habilidades[id] ?? [id, ''];
-  return { nombre, descripcion, oculta: !!oculta };
+  return { nombre, descripcion, oculta: !!oculta, href: anil.habilidades[id] ? `#/habilidades/anil/${id}` : null };
 });
 
 /** Cadena evolutiva: [{ p, nivel, metodos: [{metodo, detalle, icono}] }] en orden. */

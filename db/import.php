@@ -222,9 +222,11 @@ foreach (csv('pokemon_species') as $r) {
     $especies[$r['id']] = $r;
 }
 $nombreEspecieEn = nombres('pokemon_species_names', 'pokemon_species_id', EN);
-insertar($pdo, 'especie', ['id', 'nombre', 'nombre_en', 'generacion', 'rareza'], (function () use ($especies, $nombreEspecie, $nombreEspecieEn) {
+insertar($pdo, 'especie', ['id', 'nombre', 'nombre_en', 'generacion', 'rareza', 'ratio_genero', 'ratio_captura'],
+    (function () use ($especies, $nombreEspecie, $nombreEspecieEn) {
     foreach ($especies as $id => $r) yield [$id, $nombreEspecie[$id] ?? $r['identifier'], $nombreEspecieEn[$id] ?? $r['identifier'], $r['generation_id'],
-        $r['is_legendary'] === '1' ? 'legendario' : ($r['is_mythical'] === '1' ? 'singular' : null)];
+        $r['is_legendary'] === '1' ? 'legendario' : ($r['is_mythical'] === '1' ? 'singular' : null),
+        $r['gender_rate'] === '' ? null : (int) $r['gender_rate'], $r['capture_rate'] === '' ? null : (int) $r['capture_rate']];
 })());
 
 // Stats: stat_id 1-6 = PS, Ataque, Defensa, At. Esp., Def. Esp., Velocidad
@@ -242,7 +244,7 @@ const ETIQUETAS_FORMA = ['mega' => 'Mega', 'mega-x' => 'Mega X', 'mega-y' => 'Me
 const FORMAS_IGNORADAS = ['gmax', 'totem', 'cap', 'starter'];
 
 $pokemonIds = [];
-insertar($pdo, 'pokemon', ['id', 'especie_id', 'identificador', 'forma', 'predeterminado', 'ps', 'ataque', 'defensa', 'at_esp',
+insertar($pdo, 'pokemon', ['id', 'especie_id', 'identificador', 'forma', 'predeterminado', 'altura', 'peso', 'ps', 'ataque', 'defensa', 'at_esp',
     'def_esp', 'velocidad', 'ev_ps', 'ev_ataque', 'ev_defensa', 'ev_at_esp', 'ev_def_esp', 'ev_velocidad'],
     (function () use ($especies, $stats, &$pokemonIds) {
         foreach (csv('pokemon') as $r) {
@@ -258,6 +260,7 @@ insertar($pdo, 'pokemon', ['id', 'especie_id', 'identificador', 'forma', 'predet
             }
             $pokemonIds[$r['id']] = true;
             yield [$r['id'], $r['species_id'], $r['identifier'], $forma, $r['is_default'] === '1' ? 1 : 0,
+                   $r['height'] === '' ? null : (int) $r['height'], $r['weight'] === '' ? null : (int) $r['weight'],
                    ...array_values($s['base']), ...array_values($s['ev'])];
         }
     })());

@@ -12,13 +12,15 @@ const METODOS = [['nivel', 'Subiendo de nivel'], ['mt', 'Con MT o DT'], ['huevo'
 const MAX_LISTA = 100;
 const MAX_APRENDEN = 40;   // por grupo; el resto con "Ver todos"
 let populares = null;      // se piden una vez
+let pintada = 0;           // la última lista pedida: si se escribe mientras llegan los populares, no se pisa
 
 export function vistaMovimientos(raiz, id = null) {
   const mv = id ? mapas.movimientos.get(id) : null;
   let filtro = {};
   try { filtro = JSON.parse(sessionStorage.getItem('filtro-movs')) || {}; } catch { /* nada */ }
 
-  const entrada = el('input', { type: 'search', autocomplete: 'off', spellcheck: 'false', placeholder: 'Escribe un movimiento…', value: mv?.nombre ?? '' });
+  // Lo escrito y los filtros se recuerdan al ir a otra sección y volver
+  const entrada = el('input', { type: 'search', autocomplete: 'off', spellcheck: 'false', placeholder: 'Escribe un movimiento…', value: mv?.nombre ?? filtro.texto ?? '' });
   const tiposConMovs = new Set(catalogo.movimientos.map(m => m.tipo));
   const tipo = el('select', { 'aria-label': 'Tipo' }, el('option', { value: '' }, 'Todos'),
     catalogo.tipos.filter(t => tiposConMovs.has(t.clave)).map(t => el('option', { value: t.clave, selected: t.clave === filtro.tipo }, t.nombre)));
@@ -28,7 +30,7 @@ export function vistaMovimientos(raiz, id = null) {
   const zona = el('div', { style: { display: 'contents' } });
   // Al escribir o filtrar se ve la lista; si había un movimiento abierto, se cierra
   const filtrar = () => {
-    sessionStorage.setItem('filtro-movs', JSON.stringify({ tipo: tipo.value, categoria: categoria.value }));
+    sessionStorage.setItem('filtro-movs', JSON.stringify({ tipo: tipo.value, categoria: categoria.value, texto: entrada.value }));
     if (id && location.hash !== '#/movimientos') history.replaceState(null, '', '#/movimientos');
     id = null;
     pintarLista(zona, entrada.value, tipo.value, categoria.value);
@@ -39,18 +41,20 @@ export function vistaMovimientos(raiz, id = null) {
 
   poner(raiz, el('div', { class: 'filtro-movs' }, campo('Movimiento', entrada), campo('Tipo', tipo), campo('Categoría', categoria)), zona);
   if (mv) pintarMovimiento(zona, mv);
-  else pintarLista(zona, '', tipo.value, categoria.value);
+  else pintarLista(zona, entrada.value, tipo.value, categoria.value);
   if (!mv) entrada.focus();
 }
 
 /* ---------- Lista ---------- */
 
 async function pintarLista(zona, texto, tipo, categoria) {
+  const yo = ++pintada;
   const q = normalizar(texto);
   if (!q && !tipo && !categoria) {
     // Sin buscar nada: los más usados en Smogon
     poner(zona, el('p', { class: 'nota' }, 'Cargando…'));
-    try { populares ??= (await peticion('movimiento.php')).populares; } catch (e) { poner(zona, el('p', { class: 'msg error' }, e.message)); return; }
+    try { populares ??= (await peticion('movimiento.php')).populares; } catch (e) { if (yo === pintada) poner(zona, el('p', { class: 'msg error' }, e.message)); return; }
+    if (yo !== pintada) return;
     poner(zona, el('b', { class: 'subtitulo' }, 'Más usados en Smogon (Gen 9)'),
       el('div', { class: 'lista-objetos' }, populares.filter(p => mapas.movimientos.has(p.id))
         .map(p => filaMovimiento(mapas.movimientos.get(p.id), `${p.sets} sets`))));

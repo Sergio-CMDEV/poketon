@@ -6,9 +6,9 @@ import { catalogo, mapas, pokemon, nombre, tiposEn, ficha, buscar, existeEn, nor
 import { el, chip, sprite, aviso, campo, selectorGen, poner } from '../ui.js';
 import { borrador, guardarBorrador, guardarEnCuenta } from '../equipos.js';
 import { nuevoMiembro } from '../showdown.js';
-import { tablaCobertura } from '../cobertura.js';
-import { datosMiembro } from '../miembro.js';
-import { habilidadesAnil } from '../anil.js';
+import { tablaSegunModo, selectorCobertura } from '../cobertura.js';
+import { datosMiembro, variante, puedeSuperShiny } from '../miembro.js';
+import { habilidadesAnil, enAnil } from '../anil.js';
 
 let seleccion = 1;   // posición elegida (1-6 titulares, 7-8 reservas)
 
@@ -100,8 +100,8 @@ export function vistaEditor(raiz) {
   slots.addEventListener('contextmenu', e => e.preventDefault());
 
   function pintarCobertura() {
-    poner(cobertura, el('div', { class: 'cobertura-cab' }, el('b', {}, 'Cobertura defensiva')),
-      tablaCobertura(eq.miembros.filter(m => m.posicion <= 6), eq.generacion));
+    poner(cobertura, el('div', { class: 'cobertura-cab' }, el('b', {}, 'Cobertura'), selectorCobertura(pintarCobertura)),
+      tablaSegunModo(eq.miembros.filter(m => m.posicion <= 6), eq.generacion));
   }
 
   const cambioDeEquipo = () => { cambio(); pintarSlots(); pintarPanel(); pintarCobertura(); };
@@ -201,9 +201,26 @@ export function vistaEditor(raiz) {
       const ids = inputs.map(x => catalogo.movimientos.find(mv => normalizar(mv.nombre) === normalizar(x.value))?.id);
       inputs.forEach((x, i) => x.classList.toggle('invalido', !!x.value && !ids[i]));
       m.movimientos = ids.filter(Boolean);
-      pintarAvisos(); cambio();
+      pintarAvisos(); cambio(); pintarCobertura();   // la ofensiva depende de los movimientos
     }));
     pintarAvisos();
+
+    // Aspecto: normal, shiny o super shiny. El super shiny solo sale con "Pokémon Añil" elegido en Juego
+    // (o si es una forma de Añil, o si ya lo era). Al exportar a Showdown los dos shiny quedan como "Shiny: Yes".
+    const cajaSprite = el('span', { class: 'caja-sprite' }, d.sprite(64, d.nombre));
+    const sinShiny = !!d.anil && !d.anil.shiny;   // forma de Añil sin sprite shiny en el juego
+    const conSuper = puedeSuperShiny(m) && (enAnil() || !!m.anil_id || variante(m) === 2);
+    const aspecto = el('div', { class: 'modo-cob variante', role: 'group', 'aria-label': 'Aspecto' });
+    const pintarAspecto = () => poner(aspecto, [[0, 'Normal'], [1, 'Shiny'], ...(conSuper ? [[2, 'Super shiny']] : [])].map(([v, texto]) =>
+      el('button', {
+        type: 'button', class: v === variante(m) ? 'on' : '', 'aria-pressed': String(v === variante(m)), disabled: v > 0 && sinShiny,
+        title: v > 0 && sinShiny ? 'Esta forma no tiene sprite shiny en el juego' : v === 2 ? 'Como en Pokémon Añil: el shiny con otro tono de color' : null,
+        onclick: () => {
+          m.shiny = v; cambio(); pintarAspecto(); pintarSlots();
+          poner(cajaSprite, datosMiembro(m, eq.generacion).sprite(64, d.nombre));
+        },
+      }, texto)));
+    pintarAspecto();
 
     // Nivel (1-100). Se importa y exporta con el texto de Showdown ("Level: 50")
     const nivel = el('input', { type: 'number', min: 1, max: 100, step: 1, value: m.nivel ?? 100, 'aria-label': 'Nivel',
@@ -212,9 +229,8 @@ export function vistaEditor(raiz) {
 
     poner(panel,
       el('div', { class: 'miembro-cab' },
-        d.sprite(64, d.nombre),
-        el('div', { class: 'ficha-info' }, el('b', {}, d.nombre), el('div', { class: 'chips' }, d.tipos.map(chip)),
-          el('label', { class: 'nivel' }, el('span', {}, 'Nivel'), nivel)),
+        cajaSprite,
+        el('div', { class: 'ficha-info' }, el('b', {}, d.nombre), el('div', { class: 'chips' }, d.tipos.map(chip))),
         el('div', { class: 'acciones-miembro' },
           el('button', { class: 'btn-contorno btn-peq', title: seleccion > 6 ? 'Pasar a los titulares' : 'Pasar a las reservas', onclick: () => {
             const libres = (seleccion > 6 ? [1, 2, 3, 4, 5, 6] : [7, 8]).filter(pos => !miembro(pos));
@@ -222,6 +238,7 @@ export function vistaEditor(raiz) {
             mover(seleccion, libres[0]);
           } }, seleccion > 6 ? '↑ A titulares' : '↓ A reservas'),
           el('button', { class: 'btn-quitar', onclick: () => { eq.miembros = eq.miembros.filter(x => x !== m); cambioDeEquipo(); } }, 'Quitar'))),
+      el('div', { class: 'nivel-aspecto' }, el('label', { class: 'nivel' }, el('span', {}, 'Nivel'), nivel), aspecto),
       el('div', { class: 'dos-col campos-miembro' },
         campo('Objeto', objeto),
         gen >= 3 && campo('Habilidad', habilidad),

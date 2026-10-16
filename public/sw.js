@@ -2,9 +2,9 @@
 // La web se pide siempre primero a la red (así se ve la última versión en cuanto se publica) y se guarda una copia
 // por si no hay conexión. Solo se guardan los archivos de la web y los datos públicos (catálogo y fichas);
 // nada de la cuenta (equipos, amigos, mensajes) ni las fotos de perfil.
-const CACHE = 'poketon-v1';
+const CACHE = 'poketon-v2';
 const BASICOS = ['./', 'index.html', 'css/styles.css', 'js/app.js', 'js/tema.js', 'icono.svg', 'manifest.webmanifest'];
-const API_PUBLICA = /\/api\/(catalogo|pokemon|objeto|movimiento)\.php/;
+const API_PUBLICA = /\/api\/(catalogo|pokemon|objeto|movimiento|habilidad)\.php/;
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(BASICOS)).then(() => self.skipWaiting()));

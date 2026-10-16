@@ -1,14 +1,20 @@
 {
   "name": "poketon",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "private": true,
+  "type": "module",
   "description": "App de escritorio (Tauri) de Poketon",
   "scripts": {
     "dev": "tauri dev",
-    "build": "tauri build"
+    "build": "tauri build",
+    "test": "node --test tests/logica.test.mjs",
+    "test:api": "node --test tests/api.test.mjs",
+    "test:limites": "node --test tests/api-limites.test.mjs",
+    "changelog": "node scripts/changelog.mjs"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2"
+    "@tauri-apps/cli": "^2",
+    "linkedom": "^0.18.13"
   },
   "license": "MIT"
 }

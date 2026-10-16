@@ -1,7 +1,7 @@
 <?php
 /**
  * GET /api/pokemon.php?id=25
- * Ficha de un Pokémon: stats, EVs que da, habilidades, cadena evolutiva, movimientos que aprende
+ * Ficha de un Pokémon: stats, EVs que da, peso, altura, sexo, ratio de captura, habilidades, cadena evolutiva, movimientos que aprende
  * y sets competitivos de Smogon de cada generación.
  * Los tipos, formas y nombre ya los tiene el frontend en el catálogo.
  */
@@ -12,6 +12,8 @@ if (!$id) error_api('Falta el id del Pokémon');
 
 $p = consulta('SELECT * FROM pokemon WHERE id = ?', [$id])[0] ?? null;
 if (!$p) error_api('Pokémon no encontrado', 404);
+// Con SELECT * la ficha sigue funcionando aunque falte la migración 011 (peso, altura, sexo y captura salen vacíos)
+$e = consulta('SELECT * FROM especie WHERE id = ?', [$p['especie_id']])[0] ?? [];
 
 $num = fn(array $campos) => array_map(fn($c) => (int) $p[$c], $campos);
 
@@ -70,6 +72,11 @@ responder([
     'id'          => (int) $p['id'],
     'stats'       => $num(['ps', 'ataque', 'defensa', 'at_esp', 'def_esp', 'velocidad']),
     'evs'         => $num(['ev_ps', 'ev_ataque', 'ev_defensa', 'ev_at_esp', 'ev_def_esp', 'ev_velocidad']),
+    // En kg y m. Sexo: % de hembras, o 'sin_sexo'. Cualquiera de los cuatro es null si la BD no lo tiene
+    'peso'        => isset($p['peso']) ? $p['peso'] / 10 : null,
+    'altura'      => isset($p['altura']) ? $p['altura'] / 10 : null,
+    'sexo'        => !isset($e['ratio_genero']) ? null : ((int) $e['ratio_genero'] < 0 ? 'sin_sexo' : $e['ratio_genero'] * 12.5),
+    'captura'     => isset($e['ratio_captura']) ? (int) $e['ratio_captura'] : null,
     'habilidades' => consulta(
         'SELECT h.id, h.nombre, h.descripcion, ph.oculta
            FROM pokemon_habilidad ph JOIN habilidad h ON h.id = ph.habilidad_id

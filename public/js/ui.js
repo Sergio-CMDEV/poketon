@@ -140,14 +140,15 @@ export function botonMenu(texto, titulo, opciones, attrs = {}) {
 }
 
 let temporizador;
-/** Aviso breve en la parte de abajo. */
-export function aviso(texto, tipo = 'ok') {
+/** Aviso breve en la parte de abajo. enlace: [href, texto] para ir a algún sitio desde el aviso. */
+export function aviso(texto, tipo = 'ok', { enlace = null, ms = 3500 } = {}) {
   const t = document.getElementById('aviso');
   t.textContent = texto;
+  if (enlace) t.append(' · ', el('a', { href: enlace[0], onclick: () => { t.hidden = true; } }, enlace[1]));
   t.className = `toast ${tipo}`;
   t.hidden = false;
   clearTimeout(temporizador);
-  temporizador = setTimeout(() => { t.hidden = true; }, 3500);
+  temporizador = setTimeout(() => { t.hidden = true; }, ms);
 }
 
 /** Campo con etiqueta en mayúsculas pequeñas (JUEGO, POKÉMON, NOMBRE…). */
@@ -189,23 +190,68 @@ export function botonTema() {
 
 /* ---------- Sprites de Pokémon Añil ---------- */
 // Son tiras PNG con todos los fotogramas en horizontal; se animan moviendo el fondo a saltos (steps).
+// tono: grados de giro del color (los super shiny de Añil son el sprite shiny con el tono girado).
 
-export function spriteTira(url, { tam = 96, alt = '', ms = 60 } = {}) {
+export function spriteTira(url, { tam = 96, alt = '', ms = 60, tono = 0 } = {}) {
   const caja = el('span', { class: 'sprite tira', role: 'img', 'aria-label': alt, style: { width: `${tam}px`, height: `${tam}px` } });
   if (!url) { caja.classList.add('vacio'); caja.textContent = '?'; return caja; }
-  const img = new Image();
-  img.onload = () => {
-    const fotogramas = Math.max(1, Math.round(img.naturalWidth / img.naturalHeight));
-    caja.style.backgroundImage = `url("${url}")`;
-    caja.style.backgroundSize = `${fotogramas * tam}px ${tam}px`;
-    if (fotogramas > 1 && ms > 0) {
-      caja.animate([{ backgroundPositionX: '0px' }, { backgroundPositionX: `-${fotogramas * tam}px` }],
-        { duration: fotogramas * ms, iterations: Infinity, easing: `steps(${fotogramas})` });
-    }
+  const pintar = (src, filtro = '') => {
+    const img = new Image();
+    img.onload = () => {
+      const fotogramas = Math.max(1, Math.round(img.naturalWidth / img.naturalHeight));
+      caja.style.backgroundImage = `url("${src}")`;
+      caja.style.backgroundSize = `${fotogramas * tam}px ${tam}px`;
+      if (filtro) caja.style.filter = filtro;
+      if (fotogramas > 1 && ms > 0) {
+        caja.animate([{ backgroundPositionX: '0px' }, { backgroundPositionX: `-${fotogramas * tam}px` }],
+          { duration: fotogramas * ms, iterations: Infinity, easing: `steps(${fotogramas})` });
+      }
+    };
+    img.onerror = () => { caja.classList.add('vacio'); caja.textContent = '?'; };
+    img.src = src;
   };
-  img.onerror = () => { caja.classList.add('vacio'); caja.textContent = '?'; };
-  img.src = url;
+  // Si no se puede girar píxel a píxel (otra web sin permiso CORS), un filtro CSS parecido
+  if (tono % 360) girarTono(url, tono).then(src => (src ? pintar(src) : pintar(url, `hue-rotate(${tono}deg)`)));
+  else pintar(url);
   return caja;
+}
+
+const tonosGirados = new Map();   // "url|grados" → promesa con la imagen girada (data URL) o null
+/** Gira el tono de cada píxel en HSV, como hace el juego (Bitmap#hue_change). */
+export function girarTono(url, grados) {
+  const clave = `${url}|${grados}`;
+  if (!tonosGirados.has(clave)) tonosGirados.set(clave, new Promise(ok => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const lienzo = document.createElement('canvas');
+        lienzo.width = img.naturalWidth;
+        lienzo.height = img.naturalHeight;
+        const ctx = lienzo.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        const datos = ctx.getImageData(0, 0, lienzo.width, lienzo.height);
+        const giro = (((grados % 360) + 360) % 360) / 60;   // en sextos de vuelta
+        const px = datos.data;
+        for (let i = 0; i < px.length; i += 4) {
+          if (!px[i + 3]) continue;   // transparente
+          const [r, g, b] = [px[i] / 255, px[i + 1] / 255, px[i + 2] / 255];
+          const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+          if (!d) continue;           // gris: no tiene tono
+          let h = max === r ? ((g - b) / d + 6) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+          h = (h + giro) % 6;
+          const c = d, x = c * (1 - Math.abs((h % 2) - 1)), m = min;
+          const [r2, g2, b2] = h < 1 ? [c, x, 0] : h < 2 ? [x, c, 0] : h < 3 ? [0, c, x] : h < 4 ? [0, x, c] : h < 5 ? [x, 0, c] : [c, 0, x];
+          px[i] = Math.round((r2 + m) * 255); px[i + 1] = Math.round((g2 + m) * 255); px[i + 2] = Math.round((b2 + m) * 255);
+        }
+        ctx.putImageData(datos, 0, 0);
+        ok(lienzo.toDataURL());
+      } catch { ok(null); }   // el navegador no deja leer la imagen
+    };
+    img.onerror = () => ok(null);
+    img.src = url;
+  }));
+  return tonosGirados.get(clave);
 }
 
 /** Icono de Google (trazo simple, sin logotipo). */

@@ -34,6 +34,15 @@ $datos = [
     'google_client_id' => $CONFIG['google_client_id'] ?? '',
 ];
 
-// Solo si todo ha ido bien: el navegador lo guarda 1 hora (un error nunca se guarda)
-header('Cache-Control: public, max-age=3600');
-responder($datos);
+// El navegador (y la app de escritorio) guarda una copia, pero pregunta siempre si ha cambiado (ETag): si no, la
+// respuesta es un 304 sin datos. Antes se guardaba 1 hora sin preguntar y, al cambiar config.php (p. ej. al poner
+// el google_client_id), la app seguía hasta una hora con el botón de Google desactivado.
+$json = json_encode($datos, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+$etag = '"' . md5($json) . '"';
+header('Cache-Control: no-cache');
+header("ETag: $etag");
+// nginx, al comprimir, la cambia por W/"…" (débil): se aceptan las dos
+$recibidas = array_map(fn($e) => preg_replace('#^W/#', '', trim($e)), explode(',', $_SERVER['HTTP_IF_NONE_MATCH'] ?? ''));
+if (in_array($etag, $recibidas, true)) { http_response_code(304); exit; }
+header('Content-Type: application/json; charset=utf-8');
+echo $json;

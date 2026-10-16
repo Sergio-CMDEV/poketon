@@ -133,8 +133,21 @@ const buscarSprite = (mapa, id) => mapa.get(id.toUpperCase()) || mapa.get(id.spl
 // En pokemon_metrics*.txt, "AnimationSpeed = trasero,frontal" (o un solo valor para los dos). Por defecto 2.
 // El juego espera (velocidad / 2) × 60 ms entre fotograma y fotograma; 0 = sin animación.
 const velocidades = new Map();
+const tonosSuper = new Map();   // SuperShinyHue de pokemon_metrics (si el juego le pone uno a mano)
 for (const f of (await readdir(join(juego, 'PBS')).catch(() => [])).filter(f => /^pokemon_metrics(?!_female).*\.txt$/i.test(f))) {
-  for (const s of leerPBS(await pbs(f))) velocidades.set(s.id.replace(/\s*,\s*/, '_').replace(/_0$/, ''), lista(s.AnimationSpeed).map(Number));
+  for (const s of leerPBS(await pbs(f))) {
+    const id = s.id.replace(/\s*,\s*/, '_').replace(/_0$/, '');
+    velocidades.set(id, lista(s.AnimationSpeed).map(Number));
+    if (+s.SuperShinyHue) tonosSuper.set(id, +s.SuperShinyHue);
+  }
+}
+/** Super shiny: el sprite shiny con el tono girado tantos grados. Como el plugin del juego (Pokémon Animados para DBK):
+ *  el de pokemon_metrics si lo tiene y, si no, ((suma de los códigos de las letras del id) % 7 + 1) × 45. */
+function tonoSuperShiny(id) {
+  const propio = tonosSuper.get(id) ?? tonosSuper.get(id.split('_')[0]);   // las formas sin datos usan los de la especie
+  if (propio) return propio;
+  const suma = [...Buffer.from(id, 'utf8')].reduce((a, b) => a + b, 0) % 65536;   // String#sum de Ruby
+  return ((suma % 7) + 1) * 45;
 }
 function msPorFotograma(id) {
   const v = velocidades.get(id) ?? velocidades.get(id.split('_')[0]) ?? [];   // las formas sin datos usan los de la especie
@@ -148,6 +161,12 @@ async function fotogramas(dir, archivo) {
   const ancho = b.readUInt32BE(16), alto = b.readUInt32BE(20);
   return ancho > alto * 2 ? Math.ceil(ancho / alto) : 1;
 }
+
+/* ---------- Peso, altura, sexo y captura ---------- */
+// GenderRatio de Essentials → % de hembras ('sin_sexo' si no tiene)
+const HEMBRAS = { AlwaysMale: 0, FemaleOneEighth: 12.5, Female25Percent: 25, Female50Percent: 50, Female75Percent: 75,
+  FemaleSevenEighths: 87.5, AlwaysFemale: 100, Genderless: 'sin_sexo' };
+const numero = v => (v === undefined || v === '' || isNaN(+v) ? null : +v);
 
 /* ---------- Pokémon y formas ---------- */
 
@@ -170,6 +189,10 @@ function ficha(id, base, cambios, forma) {
     tipos: lista(d.Types),
     stats: stats(d.BaseStats),
     evs: evs(d.EVs),
+    peso: numero(d.Weight),                                  // kg
+    altura: numero(d.Height),                                // m
+    sexo: HEMBRAS[d.GenderRatio] ?? null,
+    captura: numero(d.CatchRate),
     habilidades: [...lista(d.Abilities).map(h => [h, 0]), ...lista(d.HiddenAbilities).map(h => [h, 1])],
     cadena: raizDe(base.id),
     region: cambios.Region || null,                          // para enlazar con el Pokémon oficial
@@ -205,6 +228,7 @@ for (const f of leerPBS(formasTxt)) {
 // con un fotograma de cada dos), así que el shiny dura lo mismo que la normal en vez de ir el doble de rápido.
 for (const p of pokemon) {
   p.ms = msPorFotograma(p.id);
+  if (p.shiny) p.superShiny = tonoSuperShiny(p.id);
   const [normal, shiny] = [await fotogramas('Front', p.sprite), await fotogramas('Front shiny', p.shiny)];
   if (p.shiny) p.msShiny = normal > 1 && shiny > 1 ? Math.round((p.ms * normal) / shiny) : p.ms;
 }

@@ -47,6 +47,8 @@ CREATE TABLE especie (
   nombre_en   VARCHAR(40) NOT NULL,             -- para importar/exportar texto de Showdown
   generacion  TINYINT UNSIGNED NOT NULL,
   rareza      ENUM('legendario', 'singular') NULL,  -- NULL = normal. "Singular" es el nombre oficial de los míticos
+  ratio_genero  TINYINT NULL,                     -- octavos de hembra: 4 = 50 %, 0 = solo macho, 8 = solo hembra, -1 = sin sexo
+  ratio_captura TINYINT UNSIGNED NULL,            -- 3 (legendarios) a 255 (muy fácil)
   INDEX (nombre)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -58,6 +60,8 @@ CREATE TABLE pokemon (
   identificador   VARCHAR(60) NOT NULL UNIQUE,     -- 'raichu-alola': casa con 'Raichu-Alola' de Showdown
   forma           VARCHAR(40) NULL,                -- NULL = forma normal; 'Alola', 'Mega X'…
   predeterminado  BOOLEAN NOT NULL DEFAULT TRUE,
+  altura          SMALLINT UNSIGNED NULL,          -- en decímetros, como PokeAPI (4 = 0,4 m)
+  peso            SMALLINT UNSIGNED NULL,          -- en hectogramos (60 = 6,0 kg): Patada Baja, Hierba Lazo, Cuerpo Pesado…
   ps              TINYINT UNSIGNED NOT NULL,       -- stats base: 1-255
   ataque          TINYINT UNSIGNED NOT NULL,
   defensa         TINYINT UNSIGNED NOT NULL,
@@ -251,7 +255,7 @@ CREATE TABLE miembro_equipo (
   naturaleza_id  TINYINT UNSIGNED NULL,
   teratipo_id    TINYINT UNSIGNED NULL,
   nivel          TINYINT UNSIGNED NOT NULL DEFAULT 100,
-  shiny          BOOLEAN NOT NULL DEFAULT FALSE,
+  shiny          TINYINT UNSIGNED NOT NULL DEFAULT 0,   -- 0 normal, 1 shiny, 2 super shiny (Pokémon Añil)
   ev_ps          TINYINT UNSIGNED NOT NULL DEFAULT 0,
   ev_ataque      TINYINT UNSIGNED NOT NULL DEFAULT 0,
   ev_defensa     TINYINT UNSIGNED NOT NULL DEFAULT 0,

@@ -13,6 +13,7 @@ import { datosMiembro } from '../miembro.js';
 const CATEGORIAS = ['Equipables', 'Bayas', 'Evolución', 'Megapiedras', 'Cristales Z', 'Medicinas', 'Poké Balls', 'MT', 'Combate', 'Otros'];
 const MAX_LISTA = 100;
 let populares = null;   // se piden una vez
+let pintada = 0;        // la última lista pedida: si se escribe mientras llegan los populares, no se pisa
 
 export function vistaObjetos(raiz, id = null, idAnil = null) {
   if (idAnil && anil) localStorage.setItem('gen', 'anil');   // un enlace a un objeto de Añil elige Añil
@@ -20,8 +21,10 @@ export function vistaObjetos(raiz, id = null, idAnil = null) {
   const modoAnil = idAnil ? !!anil : id ? false : enAnil();
   const o = modoAnil ? objetoAnil(idAnil) : id ? mapas.objetos.get(id) : null;
   const categoria = sessionStorage.getItem('categoria-objeto') || '';
+  // Lo escrito en el buscador se recuerda al ir a otra sección y volver
+  const textoGuardado = o ? '' : sessionStorage.getItem('texto-objeto') || '';
 
-  const entrada = el('input', { type: 'search', autocomplete: 'off', spellcheck: 'false', placeholder: 'Escribe un objeto…', value: o?.nombre ?? '' });
+  const entrada = el('input', { type: 'search', autocomplete: 'off', spellcheck: 'false', placeholder: 'Escribe un objeto…', value: o?.nombre ?? textoGuardado });
   const selector = el('select', { onchange: e => {
     sessionStorage.setItem('categoria-objeto', e.target.value);
     if (id || idAnil) location.hash = '#/objetos'; else vistaObjetos(raiz);
@@ -35,6 +38,7 @@ export function vistaObjetos(raiz, id = null, idAnil = null) {
   const zona = el('div', { style: { display: 'contents' } });
   // Al escribir se ve la lista filtrada; si había un objeto abierto, se cierra
   entrada.addEventListener('input', () => {
+    sessionStorage.setItem('texto-objeto', entrada.value);
     if ((id || idAnil) && location.hash !== '#/objetos') history.replaceState(null, '', '#/objetos');
     id = idAnil = null;
     pintarLista(zona, entrada.value, selector.value, modoAnil);
@@ -46,18 +50,20 @@ export function vistaObjetos(raiz, id = null, idAnil = null) {
     zona);
 
   if (o) (modoAnil ? pintarObjetoAnil : pintarObjeto)(zona, o);
-  else pintarLista(zona, '', categoria, modoAnil);
+  else pintarLista(zona, textoGuardado, categoria, modoAnil);
   if (!o) entrada.focus();
 }
 
 /* ---------- Lista ---------- */
 
 async function pintarLista(zona, texto, categoria, modoAnil) {
+  const yo = ++pintada;
   const q = normalizar(texto);
   if (!q && !categoria && !modoAnil) {
     // Sin buscar nada: los más usados en Smogon
     poner(zona, el('p', { class: 'nota' }, 'Cargando…'));
-    try { populares ??= (await peticion('objeto.php')).populares; } catch (e) { poner(zona, el('p', { class: 'msg error' }, e.message)); return; }
+    try { populares ??= (await peticion('objeto.php')).populares; } catch (e) { if (yo === pintada) poner(zona, el('p', { class: 'msg error' }, e.message)); return; }
+    if (yo !== pintada) return;
     poner(zona, el('b', { class: 'subtitulo' }, 'Más usados en Smogon (Gen 9)'),
       el('div', { class: 'lista-objetos' }, populares.filter(p => mapas.objetos.has(p.id))
         .map(p => filaObjeto(mapas.objetos.get(p.id), `${p.sets} sets`))));

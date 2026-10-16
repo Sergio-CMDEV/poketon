@@ -241,9 +241,9 @@ export function exportar(equipo) {
 
 /** Miembro nuevo. pokemon: id de la BD o { pokemon_id, anil_id } (formas propias de Pokémon Añil). */
 export function nuevoMiembro(pokemon, posicion) {
-  const { pokemon_id, anil_id = null } = typeof pokemon === 'object' && pokemon ? pokemon : { pokemon_id: pokemon };
+  const { pokemon_id, anil_id = null, shiny = 0 } = typeof pokemon === 'object' && pokemon ? pokemon : { pokemon_id: pokemon };
   return {
     posicion, pokemon_id, anil_id, apodo: null, objeto_id: null, habilidad_id: null, naturaleza_id: null,
-    teratipo_id: null, nivel: 100, shiny: false, evs: [0, 0, 0, 0, 0, 0], ivs: [31, 31, 31, 31, 31, 31], movimientos: [],
+    teratipo_id: null, nivel: 100, shiny, evs: [0, 0, 0, 0, 0, 0], ivs: [31, 31, 31, 31, 31, 31], movimientos: [],
   };
 }

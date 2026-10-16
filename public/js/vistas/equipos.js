@@ -4,7 +4,7 @@ import { sesion } from '../api.js';
 import { pokemon, nombre } from '../datos.js';
 import { el, sprite, aviso, poner } from '../ui.js';
 import { misEquipos, borrador, guardarBorrador, borrarEquipo, equipoVacio } from '../equipos.js';
-import { tablaCobertura } from '../cobertura.js';
+import { tablaSegunModo, selectorCobertura } from '../cobertura.js';
 import { datosMiembro } from '../miembro.js';
 
 const MAX = 8;
@@ -69,13 +69,18 @@ function tarjetaEquipo(eq, raiz, conCuenta) {
       btnBorrar));
 }
 
-/** Tarjeta "Cobertura defensiva" con un desplegable para elegir qué equipo analizar. */
+/** Tarjeta "Cobertura" (defensiva u ofensiva) con un desplegable para elegir qué equipo analizar. */
 function cobertura(equipos) {
   const contenido = el('div', { style: { display: 'contents' } });
-  const pintar = i => poner(contenido, tablaCobertura(equipos[i].miembros.filter(m => m.posicion <= 6), equipos[i].generacion));
-  const selector = el('select', { onchange: e => pintar(+e.target.value) }, equipos.map((eq, i) => el('option', { value: i }, eq.nombre)));
-  pintar(0);
+  const modo = el('div', { style: { display: 'contents' } });
+  let elegido = 0;
+  const pintar = () => {
+    poner(modo, selectorCobertura(pintar));
+    poner(contenido, tablaSegunModo(equipos[elegido].miembros.filter(m => m.posicion <= 6), equipos[elegido].generacion));
+  };
+  const selector = el('select', { onchange: e => { elegido = +e.target.value; pintar(); } }, equipos.map((eq, i) => el('option', { value: i }, eq.nombre)));
+  pintar();
   return el('section', { class: 'tarjeta cob' },
-    el('div', { class: 'cobertura-cab' }, el('b', {}, 'Cobertura defensiva'), el('label', {}, 'Equipo', selector)),
+    el('div', { class: 'cobertura-cab' }, el('b', {}, 'Cobertura'), modo, el('label', {}, 'Equipo', selector)),
     contenido);
 }

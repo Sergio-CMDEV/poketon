@@ -7,7 +7,7 @@
  *   DELETE /api/equipos.php?id=3     → borra un equipo
  *
  * Miembro: {posicion 1-8 (7-8 reservas), pokemon_id, anil_id? (forma propia de Pokémon Añil), apodo?, objeto_id?, habilidad_id?, naturaleza_id?,
- *           teratipo_id?, nivel?, shiny?, evs: [6], ivs: [6], movimientos: [ids, máx. 4]}
+ *           teratipo_id?, nivel?, shiny? (0 normal, 1 shiny, 2 super shiny), evs: [6], ivs: [6], movimientos: [ids, máx. 4]}
  */
 require __DIR__ . '/../../src/lib.php';
 require __DIR__ . '/../../src/equipos.php';
@@ -50,6 +50,7 @@ function miembros_validos(mixed $miembros): array
         $anil = isset($m['anil_id']) && $m['anil_id'] !== '' ? (string) $m['anil_id'] : null;
         if ($anil !== null && !preg_match('/^[A-Z0-9_]{1,40}$/', $anil)) error_api('Pokémon de Añil no válido');
         if ($anil === null && ($m['pokemon_id'] ?? null) === null) error_api('Falta el Pokémon');
+        $shiny = $m['shiny'] ?? 0;   // los equipos de antes de la 1.0.3 mandan true/false
         $apodo = mb_substr(texto_limpio(is_string($m['apodo'] ?? null) ? $m['apodo'] : ''), 0, 20);
         $out[] = [
             'posicion' => $pos,
@@ -61,7 +62,7 @@ function miembros_validos(mixed $miembros): array
             'naturaleza_id' => $opc($m['naturaleza_id'] ?? null),
             'teratipo_id' => $opc($m['teratipo_id'] ?? null),
             'nivel' => $int($m['nivel'] ?? 100, 1, 100, 'nivel'),
-            'shiny' => !empty($m['shiny']) ? 1 : 0,
+            'shiny' => is_bool($shiny) ? (int) $shiny : $int($shiny, 0, 2, 'shiny'),
             'evs' => $evs, 'ivs' => $ivs,
             'movimientos' => array_values(array_map(fn($x) => $int($x, 1, 65535, 'movimientos'), $movs)),
         ];

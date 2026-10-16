@@ -23,7 +23,7 @@ function listar_equipos(int $usuario): array
             'habilidad_id' => $m['habilidad_id'] === null ? null : (int) $m['habilidad_id'],
             'naturaleza_id' => $m['naturaleza_id'] === null ? null : (int) $m['naturaleza_id'],
             'teratipo_id' => $m['teratipo_id'] === null ? null : (int) $m['teratipo_id'],
-            'nivel' => (int) $m['nivel'], 'shiny' => (bool) $m['shiny'],
+            'nivel' => (int) $m['nivel'], 'shiny' => (int) $m['shiny'],
             'evs' => array_map(fn($s) => (int) $m["ev_$s"], $stats),
             'ivs' => array_map(fn($s) => (int) $m["iv_$s"], $stats),
             'movimientos' => $m['movs'] ? array_map('intval', explode(',', $m['movs'])) : [],

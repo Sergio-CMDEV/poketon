@@ -24,3 +24,4 @@ android/*
 !android/README.md
 # Instaladores ya compilados (se suben a GitHub Releases, no al repo)
 releases/
+tests/

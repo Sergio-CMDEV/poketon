@@ -13,7 +13,10 @@ import { sesion } from '../api.js';
 import { genActual, añadirAlBorrador, borrador, misEquipos, añadirAEquipo, crearEquipoCon } from '../equipos.js';
 import { datosMiembro, idsDeAnil } from '../miembro.js';
 
-const estado = { tab: 'tipos', shiny: false };
+// ladoTipos: en la pestaña Tipos, 'defensa' o 'ataque'. super: super shiny de Pokémon Añil (con shiny activado)
+const estado = { tab: 'tipos', shiny: false, super: false, ladoTipos: 'defensa' };
+/** Grados de giro del color del sprite: solo si se ve el super shiny y el Pokémon de Añil lo tiene. */
+const tonoSuper = p => (estado.shiny && estado.super ? p.superShiny ?? 0 : 0);
 
 /** id: Pokémon de la BD (#/pokemon/26) · idAnil: Pokémon de Añil (#/anil/RAICHU_1) */
 export function vistaBuscar(raiz, id = null, idAnil = null) {
@@ -116,14 +119,16 @@ function datosOficial(p, gen) {
 }
 
 function datosAnil(p) {
-  const fichaAnil = { stats: p.stats, evs: p.evs, habilidades: habilidadesAnil(p) };
+  const fichaAnil = { stats: p.stats, evs: p.evs, habilidades: habilidadesAnil(p), peso: p.peso ?? null, altura: p.altura ?? null,
+    sexo: p.sexo ?? null, captura: p.captura ?? null };
   return {
     nombre: nombreAnil(p),
     tipos: p.tipos,
     rareza: rarezaAnil(p),
     sinShiny: !p.shiny,   // la forma no tiene sprite shiny propio: se ve el normal
+    superShiny: p.shiny ? p.superShiny ?? null : null,   // grados de giro del tono del super shiny (lo calcula scripts/anil.mjs)
     tabla: tablaAnil(),
-    sprite: (shiny, tam) => spriteTira(urlSprite(p, shiny), { tam, alt: nombreAnil(p), ms: msSprite(p, shiny) }),
+    sprite: (shiny, tam) => spriteTira(urlSprite(p, shiny), { tam, alt: nombreAnil(p), ms: msSprite(p, shiny), tono: shiny ? tonoSuper(p) : 0 }),
     formas: anil.pokemon.filter(x => x.base === p.base).map(x => ({ href: `#/anil/${x.id}`, txt: x.forma || 'Normal', on: x.id === p.id })),
     idEquipo: idsDeAnil(p, anil),   // las formas propias de Añil van con anil_id (y su especie oficial si existe)
     gen: 9,
@@ -146,13 +151,14 @@ async function pintarFicha(caja, d) {
     el('div', { class: 'ficha-info' },
       el('b', {}, d.nombre),
       el('div', { class: 'chips' }, d.tipos.map(chip), d.rareza && etiquetaRareza(d.rareza)),
-      el('label', { class: 'check', title: d.sinShiny ? 'Esta forma no tiene sprite shiny en el juego' : '' },
-        el('input', { type: 'checkbox', checked: estado.shiny && !d.sinShiny, disabled: !!d.sinShiny, onchange: e => {
-          estado.shiny = e.target.checked;
-          poner(cajaSprite, d.sprite(estado.shiny, 96));
-        } }), d.sinShiny ? 'Shiny (no hay en el juego)' : 'Shiny')),
+      d.superShiny != null ? selectorVariante(d, () => pintarFicha(caja, d))
+        : el('label', { class: 'check', title: d.sinShiny ? 'Esta forma no tiene sprite shiny en el juego' : '' },
+          el('input', { type: 'checkbox', checked: estado.shiny && !d.sinShiny, disabled: !!d.sinShiny, onchange: e => {
+            estado.shiny = e.target.checked;
+            poner(cajaSprite, d.sprite(estado.shiny, 96));
+          } }), d.sinShiny ? 'Shiny (no hay en el juego)' : 'Shiny')),
     d.idEquipo
-      ? botonMenu('+ Al equipo', 'Añadir a…', () => opcionesEquipo(d.idEquipo, d.nombre), { class: 'btn-contorno' })
+      ? botonMenu('+ Al equipo', 'Añadir a…', () => opcionesEquipo(conAspecto(d), d.nombre), { class: 'btn-contorno' })
       : el('button', { class: 'btn-contorno', disabled: true, title: 'Solo existe en Pokémon Añil' }, '+ Al equipo'));
 
   const filaFormas = d.formas.length > 1 && el('div', { class: 'formas' }, el('span', { class: 'lbl' }, 'Formas'),
@@ -168,7 +174,14 @@ async function pintarFicha(caja, d) {
   const precarga = d.cargar();
   precarga.catch(() => {});
 
-  if (estado.tab === 'tipos') { poner(panel, debilidades(d.tipos, d.tabla)); return; }
+  if (estado.tab === 'tipos') {
+    // Defensa: lo que le hace cada tipo. Ataque: a qué tipos pegan fuerte los ataques de sus tipos
+    const lado = (valor, texto) => el('button', { type: 'button', class: estado.ladoTipos === valor ? 'on' : '', 'aria-pressed': String(estado.ladoTipos === valor),
+      onclick: () => { estado.ladoTipos = valor; pintarFicha(caja, d); } }, texto);
+    poner(panel, el('div', { class: 'modo-cob lado-tipos', role: 'group', 'aria-label': 'Tipos' }, lado('defensa', 'Defensa'), lado('ataque', 'Ataque')),
+      estado.ladoTipos === 'ataque' ? ataque(d.tipos, d.tabla) : debilidades(d.tipos, d.tabla));
+    return;
+  }
   poner(panel, el('p', { class: 'nota' }, 'Cargando…'));
   try {
     const f = await precarga;
@@ -176,6 +189,24 @@ async function pintarFicha(caja, d) {
     if (estado.tab === 'evo') poner(panel, d.evolucion(f));
     if (estado.tab === 'sets') poner(panel, await d.sets(f));
   } catch (e) { poner(panel, el('p', { class: 'msg error' }, e.message)); }
+}
+
+/** Pokémon Añil: Normal | Shiny | Super shiny (el shiny con el tono girado, como en el juego). */
+/** Lo que se añade al equipo: el Pokémon tal y como se está viendo (normal, shiny o super shiny). */
+function conAspecto(d) {
+  const ids = typeof d.idEquipo === 'object' ? d.idEquipo : { pokemon_id: d.idEquipo };
+  const shiny = !estado.shiny || d.sinShiny ? 0 : estado.super && d.superShiny != null ? 2 : 1;
+  return { ...ids, shiny };
+}
+
+function selectorVariante(d, alCambiar) {
+  const actual = !estado.shiny ? 'normal' : estado.super ? 'super' : 'shiny';
+  return el('div', { class: 'modo-cob variante', role: 'group', 'aria-label': 'Variante' },
+    [['normal', 'Normal'], ['shiny', 'Shiny'], ['super', 'Super shiny']].map(([v, texto]) => el('button', {
+      type: 'button', class: v === actual ? 'on' : '', 'aria-pressed': String(v === actual),
+      title: v === 'super' ? 'Como en el juego: el shiny con otro tono de color' : null,
+      onclick: () => { estado.shiny = v !== 'normal'; estado.super = v === 'super'; alCambiar(); },
+    }, texto)));
 }
 
 /** Opciones del menú "+ Al equipo": tus equipos guardados (con sesión) y el que estás editando.
@@ -223,6 +254,25 @@ function debilidades(tiposDef, tabla) {
       el('div', { class: 'chips' }, g[m].length ? g[m].map(chip) : el('span', { class: 'tenue' }, 'ninguno'))));
 }
 
+/** Ataque: con cada uno de sus tipos, a qué tipos pega ×2, ×½ o ×0; y con los dos juntos (el mejor de los dos). */
+function ataque(tiposAtq, tabla) {
+  const fila = (txt, cls, lista) => el('div', { class: `deb ${cls}` }, el('b', {}, txt),
+    el('div', { class: 'chips' }, lista.length ? lista.map(chip) : el('span', { class: 'tenue' }, 'ninguno')));
+  const contra = (t, m) => tabla.tipos.filter(d => tabla.eficacia(t, d.clave) === m).map(d => d.clave);
+  const porTipo = tiposAtq.map(t => el('div', { class: 'ataque-tipo' },
+    el('div', { class: 'ataque-cab' }, 'Ataques de tipo', chip(t)),
+    fila('×2', 'bien', contra(t, 2)), fila('×½', 'mal', contra(t, 0.5)), fila('×0', 'inmune', contra(t, 0))));
+  let juntos = null;
+  if (tiposAtq.length > 1) {
+    const mejor = d => Math.max(...tiposAtq.map(t => tabla.eficacia(t, d)));
+    juntos = el('div', { class: 'ataque-tipo' }, el('div', { class: 'ataque-cab' }, 'Con sus dos tipos (el mejor de los dos)'),
+      fila('×2', 'bien', tabla.tipos.filter(d => mejor(d.clave) > 1).map(d => d.clave)),
+      fila('×½ o ×0', 'mal', tabla.tipos.filter(d => mejor(d.clave) < 1).map(d => d.clave)));
+  }
+  return [porTipo, juntos,
+    el('p', { class: 'nota' }, 'Solo cuenta el tipo del ataque contra un Pokémon de un tipo. Los de su mismo tipo pegan ×1,5 más (STAB); contra uno de dos tipos los multiplicadores se multiplican.')];
+}
+
 /* ---------- Stats ---------- */
 
 function rango(base, esPs) {
@@ -247,10 +297,50 @@ function stats(f, gen) {
     el('p', { class: 'nota' }, 'Mín/Máx a nivel 100. Máx: naturaleza favorable, 252 EVs y 31 IVs. Mín: desfavorable, 0 EVs y 0 IVs.'),
     el('div', { class: 'kv' }, el('span', { class: 'lbl' }, 'Da al derrotarlo'), el('span', {}, da ? `${da} (EVs)` : '—')),
     el('div', { class: 'kv' }, el('span', { class: 'lbl' }, 'Destaca en'), el('span', {}, `${STATS[orden[0][1]]} y ${STATS[orden[1][1]]}`)),
+    datosFisicos(f, gen),
     gen >= 3 && el('h2', { style: { marginTop: '6px' } }, 'Habilidades'),
     gen >= 3 && f.habilidades.map(h => el('div', { class: 'habilidad' },
-      el('b', {}, h.nombre, h.oculta ? el('span', { class: 'etiqueta' }, 'Oculta') : null),
+      // El nombre lleva a su ficha en Habilidades (quién más la tiene)
+      el('b', {}, (h.href ?? (h.id ? `#/habilidades/${h.id}` : null)) ? el('a', { href: h.href ?? `#/habilidades/${h.id}` }, h.nombre) : h.nombre,
+        h.oculta ? el('span', { class: 'etiqueta' }, 'Oculta') : null),
       h.descripcion && el('p', {}, h.descripcion))),
+  ];
+}
+
+/* ---------- Peso, altura, sexo y captura ---------- */
+
+const kg = n => `${n.toLocaleString('es-ES', { maximumFractionDigits: 1 })} kg`;
+/** Patada Baja y Hierba Lazo: cuanto más pesa el que los recibe, más potencia. */
+export function potenciaPorPeso(peso) {
+  return peso < 10 ? 20 : peso < 25 ? 40 : peso < 50 ? 60 : peso < 100 ? 80 : peso < 200 ? 100 : 120;
+}
+/** Cuerpo Pesado y Golpe Calor: según cuántas veces pesa el que ataca lo que pesa el rival. [potencia, peso máximo del rival] */
+export const tramosPesoRival = peso => [[120, peso / 5], [100, peso / 4], [80, peso / 3], [60, peso / 2]];
+
+function enlaceMovimiento(nombreEn) {
+  const m = catalogo.movimientos.find(x => x.nombre_en === nombreEn);
+  return m ? el('a', { href: `#/movimientos/${m.id}` }, m.nombre) : nombreEn;
+}
+
+function datosFisicos(f, gen) {
+  if (f.peso == null && f.altura == null && f.sexo == null && f.captura == null) return null;
+  const kv = (k, v) => v != null && v !== false && el('div', { class: 'kv' }, el('span', { class: 'lbl' }, k), el('span', {}, v));
+  const sexo = f.sexo == null ? null : f.sexo === 'sin_sexo' ? 'Sin sexo'
+    : f.sexo === 0 ? 'Solo macho' : f.sexo === 100 ? 'Solo hembra'
+    : `${(100 - f.sexo).toLocaleString('es-ES')} % ♂ · ${f.sexo.toLocaleString('es-ES')} % ♀`;
+  const tramos = f.peso != null && tramosPesoRival(f.peso);
+  return [
+    el('h2', { style: { marginTop: '6px' } }, 'Datos'),
+    kv('Peso', f.peso != null && kg(f.peso)),
+    kv('Altura', f.altura != null && `${f.altura.toLocaleString('es-ES', { maximumFractionDigits: 1 })} m`),
+    kv('Sexo', sexo),
+    kv('Ratio de captura', f.captura != null && `${f.captura} (de 3 a 255: cuanto más alto, más fácil)`),
+    f.peso != null && gen >= 3 && el('div', { class: 'kv' }, el('span', { class: 'lbl' }, 'Contra él'),
+      el('span', {}, enlaceMovimiento('Low Kick'), gen >= 4 ? [' y ', enlaceMovimiento('Grass Knot')] : null,
+        ` tienen ${potenciaPorPeso(f.peso)} de potencia (más cuanto más pesa).`)),
+    tramos && gen >= 5 && el('div', { class: 'kv' }, el('span', { class: 'lbl' }, 'Si los usa él'),
+      el('span', {}, enlaceMovimiento('Heavy Slam'), ' y ', enlaceMovimiento('Heat Crash'), ': ',
+        tramos.map(([pot, max]) => `${pot} contra rivales de hasta ${kg(max)}`).join(' · '), ' · 40 contra los que pesan más.')),
   ];
 }
 
@@ -271,7 +361,7 @@ function evolucionAnil(p) {
   return el('ul', { class: 'evo' }, nodos.map(n => el('li', { style: { '--d': n.nivel } },
     n.metodos.length > 0 && el('div', { class: 'metodos' }, '↳', n.metodos.flatMap((m, i) => (i ? [el('span', {}, 'o'), metodo(m)] : [metodo(m)]))),
     el('a', { href: `#/anil/${n.p.id}`, class: `evo-nombre ${n.p.base === p.base ? 'on' : ''}` },
-      spriteTira(urlSprite(n.p, estado.shiny), { tam: 56, ms: msSprite(n.p, estado.shiny) }), el('span', {}, n.p.nombre)))));
+      spriteTira(urlSprite(n.p, estado.shiny), { tam: 56, ms: msSprite(n.p, estado.shiny), tono: tonoSuper(n.p) }), el('span', {}, n.p.nombre)))));
 }
 
 const ICONO_METODO = { nivel: '▲', amistad: '♥', intercambio: '⇄', otro: '★' };

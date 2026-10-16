@@ -82,7 +82,7 @@ export async function comprobarActualizacion(manual = false) {
 export function infoVersion() {
   const texto = el('span', {}, `Poketon ${VERSION}${tauri() ? ' · App de escritorio' : ''}`);
   versionApp().then(v => { texto.textContent = `Poketon ${v}${tauri() ? ' · App de escritorio' : ''}`; });
-  return el('p', { class: 'version-app' }, texto,
+  return el('p', { class: 'version-app' }, texto, el('a', { href: '#/novedades' }, 'Novedades'),
     tauri()?.updater && el('button', { class: 'enlace-btn', type: 'button', onclick: async e => {
       const b = e.currentTarget;
       b.disabled = true; b.textContent = 'Buscando…';
