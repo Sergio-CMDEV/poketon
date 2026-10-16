@@ -69,10 +69,10 @@ function botonCuenta() {
 let cabeceraActual = { menu: '' };
 
 /* Cada sección del menú recuerda lo último que se vio en ella (un Pokémon, un objeto…): al volver a la sección
-   desde el menú se abre eso, no la pantalla vacía. Pulsar la sección en la que ya estás lleva a su inicio. */
+   desde el menú se abre eso, no la pantalla vacía. Pulsar la sección en la que ya estás no cambia nada
+   (todas tienen su buscador arriba para ir a otra cosa). */
 const INICIO = { buscar: '#/', objetos: '#/objetos', movimientos: '#/movimientos', habilidades: '#/habilidades', equipos: '#/equipos', amigos: '#/amigos' };
-function enlaceMenu(seccion, actual) {
-  if (seccion === actual) return INICIO[seccion];
+function enlaceMenu(seccion) {
   try { return sessionStorage.getItem(`ruta-${seccion}`) || INICIO[seccion]; } catch { return INICIO[seccion]; }
 }
 function recordarRuta(seccion, hash) {
@@ -95,15 +95,15 @@ function pintarCabecera(c) {
   poner(cabecera,
     marca(),
     el('nav', { class: 'nav' },
-      el('a', { href: enlaceMenu('buscar', c.menu), class: c.menu === 'buscar' ? 'on' : '' }, 'Buscar'),
-      el('a', { href: enlaceMenu('objetos', c.menu), class: c.menu === 'objetos' ? 'on' : '' }, 'Objetos'),
+      el('a', { href: enlaceMenu('buscar'), class: c.menu === 'buscar' ? 'on' : '' }, 'Buscar'),
+      el('a', { href: enlaceMenu('objetos'), class: c.menu === 'objetos' ? 'on' : '' }, 'Objetos'),
       // En el móvil no caben las palabras enteras
-      el('a', { href: enlaceMenu('movimientos', c.menu), class: c.menu === 'movimientos' ? 'on' : '', 'aria-label': 'Movimientos' },
+      el('a', { href: enlaceMenu('movimientos'), class: c.menu === 'movimientos' ? 'on' : '', 'aria-label': 'Movimientos' },
         el('span', { class: 'largo' }, 'Movimientos'), el('span', { class: 'corto' }, 'Movs.')),
-      el('a', { href: enlaceMenu('habilidades', c.menu), class: c.menu === 'habilidades' ? 'on' : '', 'aria-label': 'Habilidades' },
+      el('a', { href: enlaceMenu('habilidades'), class: c.menu === 'habilidades' ? 'on' : '', 'aria-label': 'Habilidades' },
         el('span', { class: 'largo' }, 'Habilidades'), el('span', { class: 'corto' }, 'Habil.')),
-      el('a', { href: enlaceMenu('equipos', c.menu), class: c.menu === 'equipos' ? 'on' : '' }, 'Equipos'),
-      el('a', { href: enlaceMenu('amigos', c.menu), class: c.menu === 'amigos' ? 'on' : '' }, 'Amigos', totalAvisos() > 0 && insignia(totalAvisos()))),
+      el('a', { href: enlaceMenu('equipos'), class: c.menu === 'equipos' ? 'on' : '' }, 'Equipos'),
+      el('a', { href: enlaceMenu('amigos'), class: c.menu === 'amigos' ? 'on' : '' }, 'Amigos', totalAvisos() > 0 && insignia(totalAvisos()))),
     botonEncima(),
     botonTema(),
     botonCuenta());

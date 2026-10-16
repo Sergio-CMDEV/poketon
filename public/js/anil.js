@@ -10,7 +10,8 @@ export let anil = null;   // { tipos, pokemon, habilidades, cadenas, objetos, po
 export async function cargarAnil() {
   try {
     // En la app de escritorio, del servidor (api/anil.php, con CORS); en la web, el archivo tal cual
-    const r = await fetch(esEscritorio ? `${API}/anil.php` : 'anil/datos.json');
+    // no-cache: el navegador pregunta si ha cambiado (si no, 304 sin descargar nada); así un datos.json nuevo se ve al momento
+    const r = await fetch(esEscritorio ? `${API}/anil.php` : 'anil/datos.json', { cache: 'no-cache' });
     if (!r.ok) return;
     anil = await r.json();
   } catch { return; }
