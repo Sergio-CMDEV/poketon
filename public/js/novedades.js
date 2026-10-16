@@ -22,7 +22,7 @@ export const NOVEDADES = [
     ],
   },
   {
-    version: '1.0.1', fecha: '2026-10-13', cambios: [
+    version: '1.0.1', fecha: '2026-10-12', cambios: [
       'Nueva sección Movimientos: datos, qué hace, quién lo aprende y quién lo lleva en Smogon.',
       'Equipos Randomlocke: cualquier habilidad y cualquier movimiento, sin avisos.',
       'EVs: si escribes más de 252 se queda en 252, y avisa si el total pasa de 510.',
@@ -31,7 +31,7 @@ export const NOVEDADES = [
     ],
   },
   {
-    version: '1.0.0', fecha: '2026-10-13', cambios: [
+    version: '1.0.0', fecha: '2026-10-11', cambios: [
       'Primera versión publicada: la web y la app de escritorio para Windows.',
       'Buscador con debilidades según la generación, estadísticas, evolución, formas, shiny y sets de Smogon.',
       'Equipos de 6 titulares y 2 reservas con su tabla de cobertura, e importar y exportar de Pokémon Showdown.',

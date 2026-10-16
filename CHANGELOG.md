@@ -19,7 +19,7 @@ Lo mismo que la pantalla "Novedades" de la app (sale de `public/js/novedades.js`
 - La versión sale en "Iniciar sesión" y en "Mi cuenta". En la app de escritorio, botón "Buscar actualizaciones".
 - Botón propio de "Continuar con Google", con el estilo de la app.
 
-## 1.0.1 · 13 oct 2026
+## 1.0.1 · 12 oct 2026
 
 - Nueva sección Movimientos: datos, qué hace, quién lo aprende y quién lo lleva en Smogon.
 - Equipos Randomlocke: cualquier habilidad y cualquier movimiento, sin avisos.
@@ -27,7 +27,7 @@ Lo mismo que la pantalla "Novedades" de la app (sale de `public/js/novedades.js`
 - La cobertura cuenta la habilidad (Levitación, Geofagia, Absorbe Agua, Sebo…).
 - Primera actualización automática de la app de escritorio.
 
-## 1.0.0 · 13 oct 2026
+## 1.0.0 · 11 oct 2026
 
 - Primera versión publicada: la web y la app de escritorio para Windows.
 - Buscador con debilidades según la generación, estadísticas, evolución, formas, shiny y sets de Smogon.
